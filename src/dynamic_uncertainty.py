@@ -4,13 +4,12 @@ from torch.optim import Adam
 import torchvision
 
 import time
-import torchvision.transforms as transforms
-from tqdm import tqdm
 
 import json
-from utils import ResNet18, transform_test
+from utils import ResNet18, transform_train, transform_test
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def calculate_uncertainty(history):
     """
@@ -27,20 +26,14 @@ def calculate_uncertainty(history):
     return variance**0.5
 
 
-transform_train = transform_train = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ]
-)
 
 train_data = torchvision.datasets.CIFAR10(
     root="./data", train=True, download=True, transform=transform_train
 )
 
 pruning_ratio = 0.2
-epochs = 10
-uncertainty_window = 3
+epochs = 30
+uncertainty_window = 10
 
 model = ResNet18().to(device)
 optimizer = Adam(model.parameters(), lr=0.001)
@@ -48,12 +41,11 @@ optimizer = Adam(model.parameters(), lr=0.001)
 train_loader = DataLoader(train_data, batch_size=128, shuffle=False)
 
 testset = torchvision.datasets.CIFAR10(
-    root="./data", train=False, download=True, transform=transform_test
+    root="./data", train=True, download=True, transform=transform_test
 )
 testloader = torch.utils.data.DataLoader(
     testset, batch_size=100, shuffle=False, num_workers=2
 )
-
 
 uncertainty_history = {i: [] for i in range(len(train_data))}
 
@@ -82,30 +74,27 @@ for epoch in range(epochs):
         if batch_idx % 200 == 199:  # Print every 200 mini-batches
             printed = True
             print("[%d, %5d] loss: %.3f" % (epoch + 1, batch_idx + 1, running_loss / 200))
-            # Log the loss to wandb, so that we can visualize it
             running_loss = 0.0
             step_val = epoch * len(train_loader) + batch_idx + 1
 
         if len(train_loader) < 199 and not printed:
             if batch_idx % 100 == 99:
                 print("[%d, %5d] loss: %.3f" % (epoch + 1, batch_idx + 1, running_loss / 100))
-                # Log the loss to wandb, so that we can visualize it
                 running_loss = 0.0
                 step_val = epoch * len(train_loader) + batch_idx + 1
 
-        correct = 0
-        total = 0
-        with torch.no_grad():
-            for data in testloader:
-                images, labels = data
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-        accuracy = 100 * correct / total
-        print("[epoch:%d,  accuracy: %.3f" % (epoch + 1, accuracy))
-
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for data in testloader:
+            images, labels = data
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = 100 * correct / total
+    print("[epoch:%d,  accuracy: %.3f" % (epoch + 1, accuracy))
 
     # # Calculate dynamic uncertainty after exceeding uncertainty window
     # if epoch >= uncertainty_window - 1:
@@ -127,11 +116,14 @@ with open("uncertainty_history.json", "w") as f:
 # Calculate final dynamic uncertainty for all data points
 dynamic_uncertainty = {}
 for sample_idx, history in uncertainty_history.items():
-    if len(history) < epochs:
-        # Pad history with average value for missing epochs
-        padding_value = sum(history) / len(history)
-        history += [padding_value] * (epochs - len(history))
-    dynamic_uncertainty[sample_idx] = calculate_uncertainty(history)
+    # calculate standard deviation of window length uncertainty_window
+    std_devs = []
+    for i in range(len(history) - uncertainty_window + 1):
+        std_devs.append(calculate_uncertainty(history[i:i + uncertainty_window]))
+    
+    # mean of std devs
+    dynamic_uncertainty[sample_idx] = sum(std_devs) / len(std_devs)
+
 # Sort data by descending dynamic uncertainty
 sorted_data = sorted(
     train_data, key=lambda x: dynamic_uncertainty[x[0]], reverse=True
