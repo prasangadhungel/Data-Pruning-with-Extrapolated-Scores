@@ -1,6 +1,38 @@
+import inspect
+
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+
+# import Dataset
+from torch.utils.data import Dataset
+
+
+class IndexDataset(Dataset):
+    def __init__(self, dataset: Dataset) -> None:
+        for name, param in dataset.__dict__.items():
+            self.__setattr__(name, param)
+        for method in inspect.getmembers(dataset, predicate=inspect.ismethod):
+            self.__setattr__(method[0], method[1])
+        for method in inspect.getmembers(dataset, predicate=inspect.isfunction):
+            self.__setattr__(method[0], method[1])
+        self.dataset = dataset
+
+    def __len__(self) -> int:
+        return self.dataset.__len__()
+
+    def __getitem__(self, idx):
+        """
+        Retrieves an item from the dataset.
+
+        Args:
+            idx (int): The index of the item to retrieve.
+
+        Returns:
+            tuple: A tuple containing the image and the mapped class index.
+        """
+        item = self.dataset.__getitem__(idx)
+        return (item[0], item[1], idx)
 
 
 class BasicBlock(nn.Module):

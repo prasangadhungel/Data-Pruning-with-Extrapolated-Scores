@@ -1,12 +1,12 @@
-import torch
-from torch.utils.data import DataLoader
-from torch.optim import Adam
-import torchvision
-
+import json
 import time
 
-import json
-from utils import ResNet18, transform_train, transform_test
+import torch
+import torchvision
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+
+from utils import IndexDataset, ResNet18, transform_test, transform_train
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -26,10 +26,11 @@ def calculate_uncertainty(history):
     return variance**0.5
 
 
-
 train_data = torchvision.datasets.CIFAR10(
     root="./data", train=True, download=True, transform=transform_train
 )
+
+train_data = IndexDataset(train_data)
 
 pruning_ratio = 0.2
 epochs = 30
@@ -38,7 +39,7 @@ uncertainty_window = 10
 model = ResNet18().to(device)
 optimizer = Adam(model.parameters(), lr=0.001)
 
-train_loader = DataLoader(train_data, batch_size=128, shuffle=False)
+train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
 
 testset = torchvision.datasets.CIFAR10(
     root="./data", train=True, download=True, transform=transform_test
@@ -52,34 +53,39 @@ uncertainty_history = {i: [] for i in range(len(train_data))}
 start_time = time.time()
 for epoch in range(epochs):
     running_loss = 0.0
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (data, target, sample_idx) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         output = model(data)
         loss = torch.nn.functional.cross_entropy(output, target)
-        
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        for i, sample in enumerate(data):
-            sample_idx = batch_idx * train_loader.batch_size + i
+        for i, sample in enumerate(sample_idx):
+            # sample_idx = batch_idx * train_loader.batch_size + i
+            sample = sample.item()
             softmax_output = torch.nn.functional.softmax(output[i], dim=0)
             prediction = softmax_output[target[i]]
             prediction = prediction.detach().cpu().numpy().item()
-            uncertainty_history[sample_idx].append(prediction)
-
+            uncertainty_history[sample].append(prediction)
 
         running_loss += loss.item()
         printed = False
         if batch_idx % 200 == 199:  # Print every 200 mini-batches
             printed = True
-            print("[%d, %5d] loss: %.3f" % (epoch + 1, batch_idx + 1, running_loss / 200))
+            print(
+                "[%d, %5d] loss: %.3f" % (epoch + 1, batch_idx + 1, running_loss / 200)
+            )
             running_loss = 0.0
             step_val = epoch * len(train_loader) + batch_idx + 1
 
         if len(train_loader) < 199 and not printed:
             if batch_idx % 100 == 99:
-                print("[%d, %5d] loss: %.3f" % (epoch + 1, batch_idx + 1, running_loss / 100))
+                print(
+                    "[%d, %5d] loss: %.3f"
+                    % (epoch + 1, batch_idx + 1, running_loss / 100)
+                )
                 running_loss = 0.0
                 step_val = epoch * len(train_loader) + batch_idx + 1
 
@@ -95,7 +101,6 @@ for epoch in range(epochs):
             correct += (predicted == labels).sum().item()
     accuracy = 100 * correct / total
     print("[epoch:%d,  accuracy: %.3f" % (epoch + 1, accuracy))
-
     # # Calculate dynamic uncertainty after exceeding uncertainty window
     # if epoch >= uncertainty_window - 1:
     #     for sample_idx, history in uncertainty_history.items():
@@ -119,15 +124,16 @@ for sample_idx, history in uncertainty_history.items():
     # calculate standard deviation of window length uncertainty_window
     std_devs = []
     for i in range(len(history) - uncertainty_window + 1):
-        std_devs.append(calculate_uncertainty(history[i:i + uncertainty_window]))
-    
+        std_devs.append(calculate_uncertainty(history[i : i + uncertainty_window]))
+
     # mean of std devs
     dynamic_uncertainty[sample_idx] = sum(std_devs) / len(std_devs)
 
 # Sort data by descending dynamic uncertainty
-sorted_data = sorted(
-    train_data, key=lambda x: dynamic_uncertainty[x[0]], reverse=True
-)
+with open("dynamic_uncertainty.json", "w") as f:
+    json.dump(dynamic_uncertainty, f)
+
+sorted_data = sorted(train_data, key=lambda x: dynamic_uncertainty[x[2]], reverse=True)
 
 # Prune data based on pruning ratio
 num_samples = len(sorted_data)
