@@ -162,6 +162,8 @@ cython_debug/
 
 # Data
 data/
+cifar10_data/
+*_samples_*/
 
 # logs
 logs/
