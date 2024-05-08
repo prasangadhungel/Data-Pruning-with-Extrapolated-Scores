@@ -1,5 +1,4 @@
 import json
-import random
 import time
 
 import torch
@@ -11,28 +10,39 @@ import wandb
 from utils import ResNet18, transform_test, transform_train
 
 # load /nfs/homedirs/dhp/unsupervised-data-pruning/dynamic_uncertainty_1.json
-with open("/nfs/homedirs/dhp/unsupervised-data-pruning/dynamic_uncertainty_1.json", "r") as f:
+with open(
+    "/nfs/homedirs/dhp/unsupervised-data-pruning/dynamic_uncertainty_1.json", "r"
+) as f:
     uncertainty_scores = json.load(f)
 
 for prune_percentage in [0, 0.1, 0.2, 0.5]:
     str_prune_percentage = str(int(prune_percentage * 100))
-    wandb.init(project="cifar10_pruning", name="dynamic-uncertainty-prune-" + str_prune_percentage)
+    wandb.init(
+        project="cifar10_pruning",
+        name="dynamic-uncertainty-prune-" + str_prune_percentage,
+    )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset = torchvision.datasets.CIFAR10(
         root="./data", train=True, download=True, transform=transform_train
     )
-    
+
     # sort the uncertainty scores in descending order and get the indices of most uncertain samples
-    sorted_uncertainty_scores = {k: v for k, v in sorted(uncertainty_scores.items(), key=lambda item: item[1], reverse=True)}
-    top_samples = list(sorted_uncertainty_scores.keys())[:int((1 - prune_percentage) * len(sorted_uncertainty_scores))]
+    sorted_uncertainty_scores = {
+        k: v
+        for k, v in sorted(
+            uncertainty_scores.items(), key=lambda item: item[1], reverse=True
+        )
+    }
+    top_samples = list(sorted_uncertainty_scores.keys())[
+        : int((1 - prune_percentage) * len(sorted_uncertainty_scores))
+    ]
 
     # Get the indices of the top samples
     indices_to_keep = [int(sample) for sample in top_samples]
 
     pruned_trainset = torch.utils.data.Subset(trainset, indices_to_keep)
-
 
     trainloader = torch.utils.data.DataLoader(
         pruned_trainset, batch_size=128, shuffle=True, num_workers=2
@@ -72,15 +82,21 @@ for prune_percentage in [0, 0.1, 0.2, 0.5]:
             if i % 200 == 199:  # Print every 200 mini-batches
                 printed = True
                 print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / 200))
-                wandb.log({"Loss": running_loss / 200}, step=epoch * len(trainloader) + i)
+                wandb.log(
+                    {"Loss": running_loss / 200}, step=epoch * len(trainloader) + i
+                )
                 # Log the loss to wandb, so that we can visualize it
                 running_loss = 0.0
                 step_val = epoch * len(trainloader) + i + 1
 
             if len(trainloader) < 199 and not printed:
                 if i % 100 == 99:
-                    print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / 100))
-                    wandb.log({"Loss": running_loss / 100}, step=epoch * len(trainloader) + i)
+                    print(
+                        "[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / 100)
+                    )
+                    wandb.log(
+                        {"Loss": running_loss / 100}, step=epoch * len(trainloader) + i
+                    )
                     # Log the loss to wandb, so that we can visualize it
                     running_loss = 0.0
                     step_val = epoch * len(trainloader) + i + 1
@@ -100,7 +116,6 @@ for prune_percentage in [0, 0.1, 0.2, 0.5]:
         wandb.log({"Accuracy": accuracy}, step=step_val)
 
         scheduler.step()
-
 
     end_time = time.time()
     training_time = end_time - start_time
