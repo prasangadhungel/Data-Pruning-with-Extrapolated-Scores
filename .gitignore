@@ -164,6 +164,8 @@ cython_debug/
 data/
 cifar10_data/
 *_samples_*/
+src/*.json
+scores/
 
 # logs
 logs/

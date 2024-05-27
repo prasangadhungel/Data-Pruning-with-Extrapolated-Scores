@@ -1,38 +1,5 @@
-import inspect
-
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms as transforms
-
-# import Dataset
-from torch.utils.data import Dataset
-
-
-class IndexDataset(Dataset):
-    def __init__(self, dataset: Dataset) -> None:
-        for name, param in dataset.__dict__.items():
-            self.__setattr__(name, param)
-        for method in inspect.getmembers(dataset, predicate=inspect.ismethod):
-            self.__setattr__(method[0], method[1])
-        for method in inspect.getmembers(dataset, predicate=inspect.isfunction):
-            self.__setattr__(method[0], method[1])
-        self.dataset = dataset
-
-    def __len__(self) -> int:
-        return self.dataset.__len__()
-
-    def __getitem__(self, idx):
-        """
-        Retrieves an item from the dataset.
-
-        Args:
-            idx (int): The index of the item to retrieve.
-
-        Returns:
-            tuple: A tuple containing the image and the mapped class index.
-        """
-        item = self.dataset.__getitem__(idx)
-        return (item[0], item[1], idx)
 
 
 class BasicBlock(nn.Module):
@@ -141,22 +108,17 @@ class ResNet(nn.Module):
         return out
 
 
-def ResNet18():
-    return ResNet(BasicBlock, [2, 2, 2, 2])
+def ResNet18(num_classes=10):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes=num_classes)
 
 
-transform_train = transforms.Compose(
-    [
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ]
-)
+def ResNet50(num_classes=10):
+    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes)
 
-transform_test = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ]
-)
+
+def get_model(model_name: str, num_classes: int):
+    if model_name == "ResNet18":
+        model = ResNet18(num_classes=num_classes)
+    elif model_name == "ResNet50":
+        model = ResNet50(num_classes=num_classes)
+    return model
