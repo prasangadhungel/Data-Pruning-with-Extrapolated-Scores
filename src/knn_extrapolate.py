@@ -1,12 +1,14 @@
 import json
+
 import numpy as np
+import pandas as pd
 import torch
 import torchvision
-import pandas as pd
-from tqdm import tqdm
 from scipy.stats import spearmanr
+from tqdm import tqdm
+
 from utils.dataset import get_dataset
-from utils.models import load_model, ResNetEmbedding
+from utils.models import ResNetEmbedding, load_model
 
 
 def get_correlation(
@@ -92,7 +94,7 @@ for model in tqdm(model_combination):
         model = load_model(model_name, num_classes, model_path, device)
         embedding_model = ResNetEmbedding(model).to(device)
         embedding_model.eval()
-    
+
     elif model == "resnet18":
         embedding_model = torchvision.models.resnet18(pretrained=True)
         embedding_model = embedding_model.to(device)
@@ -102,7 +104,7 @@ for model in tqdm(model_combination):
         embedding_model = torchvision.models.resnet50(pretrained=True)
         embedding_model = embedding_model.to(device)
         embedding_model.eval()
-    
+
     embeddings_dict = {}
 
     for i in tqdm(range(len(trainset))):
@@ -112,7 +114,6 @@ for model in tqdm(model_combination):
         sample = sample.unsqueeze(0)
         embedding_val = embedding_model(sample)
         embeddings_dict[sample_idx] = embedding_val
-
 
     for k in tqdm(k_combination):
         for num_seed in tqdm(num_seeds_combination):
@@ -151,6 +152,6 @@ results = pd.DataFrame(
 
 # save in /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolate_results.csv
 results.to_csv(
-    "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolate_results_own_model.csv",
+    "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolate_results.csv",
     index=False,
 )
