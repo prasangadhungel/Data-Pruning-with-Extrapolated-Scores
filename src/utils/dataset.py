@@ -102,47 +102,47 @@ class CustomDatasetWithIndices(Dataset):
         return image, label, index
 
 
-class NPZloader(Dataset):
-    def __init__(self, npz_path: str, transform=None) -> None:
-        self.npz_path = Path(npz_path)
-        self.data = np.load(npz_path)
+# class NPZloader(Dataset):
+#     def __init__(self, npz_path: str, transform=None) -> None:
+#         self.npz_path = Path(npz_path)
+#         self.data = np.load(npz_path)
 
-        # use torch.from_numpy to convert numpy array to tensor
-        self.data["image"] = from_numpy(self.data["image"])
-        self.data["label"] = from_numpy(self.data["label"])
+#         # use torch.from_numpy to convert numpy array to tensor
+#         self.data["image"] = from_numpy(self.data["image"])
+#         self.data["label"] = from_numpy(self.data["label"])
 
-        # split into train and test
-        # randomize the data
-        np.random.seed(0)
-        indices = np.random.permutation(len(self.data["image"]))
-        self.data["image"] = self.data["image"][indices]
-        self.data["label"] = self.data["label"][indices]
+#         # split into train and test
+#         # randomize the data
+#         np.random.seed(0)
+#         indices = np.random.permutation(len(self.data["image"]))
+#         self.data["image"] = self.data["image"][indices]
+#         self.data["label"] = self.data["label"][indices]
 
-        self.data["image"] = self.data["image"][: int(0.8 * len(self.data["image"]))]
-        self.data["label"] = self.data["label"][: int(0.8 * len(self.data["label"]))]
+#         self.data["image"] = self.data["image"][: int(0.8 * len(self.data["image"]))]
+#         self.data["label"] = self.data["label"][: int(0.8 * len(self.data["label"]))]
 
-        self.transform = transform
+#         self.transform = transform
 
-    def __len__(self) -> int:
-        return len(self.labels)
+#     def __len__(self) -> int:
+#         return len(self.labels)
 
-    def __getitem__(self, idx):
-        """
-        Retrieves an item from the dataset.
+#     def __getitem__(self, idx):
+#         """
+#         Retrieves an item from the dataset.
 
-        Args:
-            idx (int): The index of the item to retrieve.
+#         Args:
+#             idx (int): The index of the item to retrieve.
 
-        Returns:
-            tuple: A tuple containing the image and the mapped class index.
-        """
-        image = self.data["image"][idx]
-        label = self.data["label"][idx]
-        idx = idx
-        if self.transform:
-            image = self.transform(image)
+#         Returns:
+#             tuple: A tuple containing the image and the mapped class index.
+#         """
+#         image = self.data["image"][idx]
+#         label = self.data["label"][idx]
+#         idx = idx
+#         if self.transform:
+#             image = self.transform(image)
 
-        return image, label, idx
+#         return image, label, idx
 
 
 def get_transforms(mean, std, from_numpy=False):
@@ -183,7 +183,7 @@ def get_transforms(mean, std, from_numpy=False):
     return transform_train, transform_test
 
 
-def get_dataset(dataset_name: str, partial=False, subset_idx=0):
+def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
     if dataset_name == "CIFAR10":
         mean_cifar10 = (0.4914, 0.4822, 0.4465)
         std_cifar10 = (0.2470, 0.2435, 0.2616)
@@ -240,34 +240,31 @@ def get_dataset(dataset_name: str, partial=False, subset_idx=0):
             )
 
         else:
-            data1 = np.load(
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part1.npz"
-            )
-            data2 = np.load(
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part2.npz"
-            )
-            data3 = np.load(
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part3.npz"
-            )
-            data4 = np.load(
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part4.npz"
-            )
-
-            images = np.concatenate(
-                (data1["image"], data2["image"], data3["image"], data4["image"])
-            )
-            labels = np.concatenate(
-                (data1["label"], data2["label"], data3["label"], data4["label"])
-            )
+            data_files = [
+                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part1.npz",
+                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part2.npz",
+                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part3.npz",
+                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part4.npz",
+            ]
+            images = []
+            labels = []
+            for file in data_files:
+                data = np.load(file)
+                images.append(data["image"])
+                labels.append(data["label"])
+            images = np.concatenate(images)
+            labels = np.concatenate(labels)
 
             # read json /nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_10.0_percentage.json
             with open(
-                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_2_percentage.json",
+                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_50M_total_2_percentage.json",
                 "r",
             ) as f:
                 indices_dict = json.load(f)
 
-            choosen_indices = indices_dict[subset_idx]
+            choosen_indices = []
+            for subset_idx in subset_idxs:
+                choosen_indices.extend(indices_dict[str(subset_idx)])
 
             train_images = images[choosen_indices]
             train_labels = labels[choosen_indices]
@@ -277,6 +274,74 @@ def get_dataset(dataset_name: str, partial=False, subset_idx=0):
 
             mean_cifar100_syn = (0.5321, 0.5066, 0.4586)
             std_cifar100_syn = (0.2673, 0.2564, 0.2761)
+
+            transform_train, transform_test = get_transforms(
+                mean_cifar100_syn, std_cifar100_syn, from_numpy=True
+            )
+
+            trainset = CustomDatasetWithIndices(
+                train_images, train_labels, choosen_indices, transform=transform_train
+            )
+            testset = CustomDataset(test_images, test_labels, transform=transform_test)
+
+    elif dataset_name == "SYNTHETIC_CIFAR100_1M":
+        mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
+        std_cifar100_syn = (0.2748, 0.2640, 0.2858)
+
+        data = np.load(
+            "/nfs/homedirs/dhp/unsupervised-data-pruning/data/1m.npz"
+        )
+
+        num_samples = len(data["label"])
+        np.random.seed(40)
+        if not partial:
+            indices = np.random.permutation(num_samples)
+
+            train_images = data["image"][indices[: int(0.8 * num_samples)]]
+            train_labels = data["label"][indices[: int(0.8 * num_samples)]]
+
+            test_images = data["image"][indices[int(0.8 * num_samples) :]]
+            test_labels = data["label"][indices[int(0.8 * num_samples) :]]
+
+            mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
+            std_cifar100_syn = (0.2748, 0.2640, 0.2858)
+
+            transform_train, transform_test = get_transforms(
+                mean_cifar100_syn, std_cifar100_syn, from_numpy=True
+            )
+
+            trainset = CustomDatasetWithIndices(
+                train_images, train_labels, indices, transform=transform_train
+            )
+            testset = CustomDatasetWithIndices(
+                test_images, test_labels, indices, transform=transform_test
+            )
+
+        else:
+            data = np.load("/nfs/homedirs/dhp/unsupervised-data-pruning/data/1m.npz")
+
+            images = data["image"]
+            labels = data["label"]
+
+            # read json /nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_10.0_percentage.json
+            with open(
+                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_99_percentage_pruned.json",
+                "r",
+            ) as f:
+                indices_dict = json.load(f)
+
+            choosen_indices = []
+            for subset_idx in subset_idxs:
+                choosen_indices.extend(indices_dict[str(subset_idx)])
+
+            train_images = images[choosen_indices]
+            train_labels = labels[choosen_indices]
+
+            test_images = images[indices_dict["test"]]
+            test_labels = labels[indices_dict["test"]]
+
+            mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
+            std_cifar100_syn = (0.2748, 0.2640, 0.2858)
 
             transform_train, transform_test = get_transforms(
                 mean_cifar100_syn, std_cifar100_syn, from_numpy=True

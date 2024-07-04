@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -121,4 +122,29 @@ def get_model(model_name: str, num_classes: int):
         model = ResNet18(num_classes=num_classes)
     elif model_name == "ResNet50":
         model = ResNet50(num_classes=num_classes)
+    return model
+
+class ResNetEmbedding(nn.Module):
+    def __init__(self, model):
+        super(ResNetEmbedding, self).__init__()
+        self.features = nn.Sequential(
+            model.conv1,
+            model.bn1,
+            nn.ReLU(inplace=True),
+            model.layer1,
+            model.layer2,
+            model.layer3,
+            model.layer4
+        )
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.pool(x)
+        x = torch.flatten(x, 1)
+        return x
+
+def load_model(model_name, num_classes, model_path, device):
+    model = get_model(model_name, num_classes)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     return model
