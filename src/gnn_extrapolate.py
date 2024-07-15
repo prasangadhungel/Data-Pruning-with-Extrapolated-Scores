@@ -61,6 +61,11 @@ def prepare_data(embeddings_dict, seed_samples, full_scores_dict, k, distance="e
     edge_index, edge_attr = get_edges_and_attributes(embeddings, k, distance)
     x = torch.tensor(embeddings, dtype=torch.float)
     
+    # Add the binary feature for seed nodes
+    seed_feature = torch.zeros(x.size(0), 1, dtype=torch.float)
+    seed_feature[seed_samples_pos] = 1.0
+    x = torch.cat((x, seed_feature), dim=1)
+    
     mask = torch.zeros(y.size(0), dtype=torch.bool)
     mask[seed_samples_pos] = True
     
@@ -195,7 +200,7 @@ if __name__ == "__main__":
                         "spearman_avg": spearman_avg,
                     })
                     wandb.finish()
-                    print(f"Model: {model_name}, k: {k}, Num Seeds: {num_seed}, Distance: {distance_metric} , Corr Avg: {corr_avg}, Spearman Avg: {spearman_avg}")
+                    print(f"Model: {model_name}, k: {k}, Num Seeds: {num_seed}, Distance: {distance_metric} , Corr Avg: {corr_avg}, Spearman: {spearman_avg}")
 
     results_df = pd.DataFrame(results)
     results_df.to_csv("/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation.csv", index=False)
