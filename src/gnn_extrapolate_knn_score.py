@@ -90,7 +90,7 @@ if __name__ == "__main__":
         knn_extrapolated_score = json.load(f)
 
     model_combination = ["resnet50-trained-to-compute-score", "resnet18", "resnet50"]
-    k_combination = [10, 20, 50, 100]
+    k_combination = [50, 20, 50, 10]
     trainset_size = [100_000, 50_000, 20_000, 10_000]
 
     results = []
