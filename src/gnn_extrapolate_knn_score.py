@@ -125,7 +125,7 @@ if __name__ == "__main__":
         for k in tqdm(k_combination):
             for num_seed in tqdm(trainset_size):
                     wandb.init(
-                            project=f"GNN extrapolate", name=f"k-{k}-num_seed-{num_seed}-model-{model_name}"
+                            project=f"GNN extrapolate", name=f"k-{k}-num_train-{num_seed}-model-{model_name}"
                     )
                     train_samples = np.random.choice(list(embeddings_dict.keys()), num_seed, replace=False)
                     distance_metric = "euclidean"
