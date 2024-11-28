@@ -1,9 +1,11 @@
 import json
 
+import hydra
 import numpy as np
 import pandas as pd
 import torch
 import torchvision
+from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from tqdm import tqdm
 
@@ -12,10 +14,15 @@ from utils.models import ResNetEmbedding, load_model
 
 
 def get_correlation(
-    embeddings_dict, number_of_seeds, k, distance_metric, full_scores_dict
+    embeddings_dict,
+    number_of_seeds,
+    k,
+    distance_metric,
+    full_scores_dict,
+    original_score,
 ):
     samples_list = [int(i) for i in embeddings_dict.keys()]
-    seed_samples = np.random.choice(samples_list, number_of_seeds, replace=False)
+    seed_samples = samples_list
     unseeded_samples = [i for i in samples_list if i not in seed_samples]
 
     unseeded_scores_seed_avg = {}
@@ -43,7 +50,7 @@ def get_correlation(
         neighbors_scores = [full_scores_dict[str(arg)] for arg in keys_smallest]
         distance_neighbors = [distances[arg] + 1e-10 for arg in keys_smallest]
         avg_score = np.mean(neighbors_scores)
-        weights = [1 / d for d in distance_neighbors]
+        weights = [np.exp(-d) for d in distance_neighbors]
         weighted_avg_score = np.average(neighbors_scores, weights=weights)
         unseeded_scores_seed_avg[i] = avg_score
         unseeded_scores_seed_weighted[i] = weighted_avg_score
@@ -51,107 +58,138 @@ def get_correlation(
     orig_list = [full_scores_dict[str(k)] for k in unseeded_samples]
     avg_list = [unseeded_scores_seed_avg[k] for k in unseeded_samples]
     weighted_list = [unseeded_scores_seed_weighted[k] for k in unseeded_samples]
-    corr_avg = np.corrcoef(orig_list, avg_list)
+    true_scores = [original_score[str(k)] for k in unseeded_samples]
+    corr_avg = np.corrcoef(true_scores, avg_list)
     corr_avg = corr_avg[0, 1]
-    corr_weighted = np.corrcoef(orig_list, weighted_list)
+    corr_weighted = np.corrcoef(true_scores, weighted_list)
     corr_weighted = corr_weighted[0, 1]
     spearman_avg = spearmanr(orig_list, avg_list).correlation
     spearman_weighted = spearmanr(orig_list, weighted_list).correlation
 
-    return corr_avg, corr_weighted, spearman_avg, spearman_weighted
+    knn_dict = {}
+    for keys in full_scores_dict:
+        if int(keys) in seed_samples:
+            knn_dict[keys] = full_scores_dict[keys]
+        else:
+            knn_dict[keys] = unseeded_scores_seed_weighted[int(keys)]
+
+    return corr_avg, corr_weighted, spearman_avg, spearman_weighted, knn_dict
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-trainset, _ = get_dataset("SYNTHETIC_CIFAR100_1M", partial=True, subset_idxs=["50k"])
+@hydra.main(config_path="configs", config_name="knn_config")
+def main(cfg: DictConfig):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    trainset, _ = get_dataset(
+        cfg.dataset.name,
+        partial=cfg.dataset.partial,
+        subset_idxs=cfg.dataset.subset_idxs,
+    )
 
-with open(
-    "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
-) as f:
-    full_scores_dict = json.load(f)
+    # Load full scores and original scores
+    with open(cfg.scores.full_scores_part1) as f:
+        full_scores_dict_1 = json.load(f)
 
-# print keys of full_scores_dict
-print(list(full_scores_dict.keys())[:50])
+    with open(cfg.scores.full_scores_part2) as f:
+        full_scores_dict_2 = json.load(f)
 
-model_combination = ["resnet18", "resnet50", "resnet50-trained-to-compute-score"]
-k_combination = [5, 20, 50]
-num_seeds_combination = [1000, 10000, 20000, 50000, 100000]
-distance_combination = ["cosine", "euclidean"]
+    full_scores_dict = {**full_scores_dict_1, **full_scores_dict_2}
 
-models = []
-ks = []
-num_seeds = []
-distance_metrics = []
-corr_avgs = []
-corr_weighteds = []
-spearman_avgs = []
-spearman_weighteds = []
+    with open(cfg.scores.original_scores) as f:
+        original_score = json.load(f)
 
-for model in tqdm(model_combination):
-    if model == "resnet50-trained-to-compute-score":
-        model_path = "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt"
-        model_name = "ResNet50"
-        num_classes = 100
-        model = load_model(model_name, num_classes, model_path, device)
-        embedding_model = ResNetEmbedding(model).to(device)
-        embedding_model.eval()
+    # Loop over combinations
+    models = []
+    ks = []
+    num_seeds = []
+    distance_metrics = []
+    corr_avgs = []
+    corr_weighteds = []
+    spearman_avgs = []
+    spearman_weighteds = []
 
-    elif model == "resnet18":
-        embedding_model = torchvision.models.resnet18(pretrained=True)
-        embedding_model = embedding_model.to(device)
-        embedding_model.eval()
+    for model in tqdm(cfg.models.names):
+        if model == "resnet50-self-trained":
+            model_path = cfg.models.resnet50_self_trained_path
+            model_name = "ResNet50"
+            num_classes = cfg.models.num_classes
+            model = load_model(model_name, num_classes, model_path, device)
+            embedding_model = ResNetEmbedding(model).to(device)
+            embedding_model.eval()
 
-    elif model == "resnet50":
-        embedding_model = torchvision.models.resnet50(pretrained=True)
-        embedding_model = embedding_model.to(device)
-        embedding_model.eval()
+        elif model == "resnet18":
+            embedding_model = torchvision.models.resnet18(pretrained=True)
+            embedding_model = embedding_model.to(device)
+            embedding_model.eval()
 
-    embeddings_dict = {}
+        elif model == "resnet50":
+            embedding_model = torchvision.models.resnet50(pretrained=True)
+            embedding_model = embedding_model.to(device)
+            embedding_model.eval()
 
-    for i in tqdm(range(len(trainset))):
-        sample = trainset[i][0]
-        sample_idx = trainset[i][2]
-        sample = sample.to(device)
-        sample = sample.unsqueeze(0)
-        embedding_val = embedding_model(sample)
-        embeddings_dict[sample_idx] = embedding_val
+        embeddings_dict = {}
 
-    for k in tqdm(k_combination):
-        for num_seed in tqdm(num_seeds_combination):
-            for distance_metric in tqdm(distance_combination):
+        for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
+            sample = trainset[i][0]
+            sample_idx = trainset[i][2]
+            sample = sample.to(device)
+            sample = sample.unsqueeze(0)
+            with torch.no_grad():
+                embedding_val = embedding_model(sample)
+            embeddings_dict[sample_idx] = embedding_val.cpu()
 
-                corr_avg, corr_weighted, spearman_avg, spearman_weighted = (
-                    get_correlation(
-                        embeddings_dict, num_seed, k, distance_metric, full_scores_dict
+        for k in tqdm(cfg.knn.k_values):
+            for num_seed in tqdm(cfg.knn.num_seeds):
+                for distance_metric in tqdm(cfg.knn.distance_metrics):
+
+                    (
+                        corr_avg,
+                        corr_weighted,
+                        spearman_avg,
+                        spearman_weighted,
+                        knn_dict,
+                    ) = get_correlation(
+                        embeddings_dict,
+                        num_seed,
+                        k,
+                        distance_metric,
+                        full_scores_dict,
+                        original_score,
                     )
-                )
 
-                models.append(model)
-                ks.append(k)
-                num_seeds.append(num_seed)
-                distance_metrics.append(distance_metric)
-                corr_avgs.append(corr_avg)
-                corr_weighteds.append(corr_weighted)
-                spearman_avgs.append(spearman_avg)
-                spearman_weighteds.append(spearman_weighted)
-                print(
-                    f"k: {k}, num_seed: {num_seed}, distance_metric: {distance_metric}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}"
-                )
+                    models.append(model)
+                    ks.append(k)
+                    num_seeds.append(num_seed)
+                    distance_metrics.append(distance_metric)
+                    corr_avgs.append(corr_avg)
+                    corr_weighteds.append(corr_weighted)
+                    spearman_avgs.append(spearman_avg)
+                    spearman_weighteds.append(spearman_weighted)
+                    print(
+                        f"k: {k}, num_seed: {num_seed}, distance_metric: {distance_metric}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}"
+                    )
 
-results = pd.DataFrame(
-    {
-        "model": models,
-        "k": ks,
-        "num_seeds": num_seeds,
-        "distance_metric": distance_metrics,
-        "corr_avg": corr_avgs,
-        "corr_weighted": corr_weighteds,
-        "spearman_avg": spearman_avgs,
-        "spearman_weighted": spearman_weighteds,
-    }
-)
+                    with open(
+                        f"{cfg.output.knn_dict_path}_{model}_{k}_{num_seed}_{distance_metric}.json",
+                        "w",
+                    ) as f:
+                        json.dump(knn_dict, f)
 
-# save in /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolate_results.csv
-results.to_csv(
-    "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolate_results.csv",
-    index=False,
-)
+    # Save results
+    results = pd.DataFrame(
+        {
+            "model": models,
+            "k": ks,
+            "num_seeds": num_seeds,
+            "distance_metric": distance_metrics,
+            "corr_avg": corr_avgs,
+            "corr_weighted": corr_weighteds,
+            "spearman_avg": spearman_avgs,
+            "spearman_weighted": spearman_weighteds,
+        }
+    )
+
+    results.to_csv(cfg.output.results_path, index=False)
+
+
+if __name__ == "__main__":
+    main()

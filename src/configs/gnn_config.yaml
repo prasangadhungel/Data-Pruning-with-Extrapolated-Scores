@@ -1,0 +1,23 @@
+dataset:
+  name: "SYNTHETIC_CIFAR100_1M"
+  partial: true
+  subset_idxs: ["0"]
+  scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
+
+models:
+  names: ["resnet50-self-trained"]
+  resnet50:
+    path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt"
+
+hyperparams:
+  k_values: [20]
+  num_seeds: [1000]
+  distance: "euclidean"
+  lr: 0.01
+  epochs: 10000
+
+wandb:
+  project: "GNN extrapolate"
+
+output:
+  results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation.csv"

@@ -1,0 +1,27 @@
+experiment:
+  num_iterations: 2
+
+dataset:
+  name: "SYNTHETIC_CIFAR100_50"
+  num_classes: 100
+
+model:
+  name: "ResNet50"
+
+training:
+  batch_size: 256
+  num_epochs: 60
+  lr: 0.001
+  weight_decay: 0.001
+
+uncertainty:
+  window: 10
+
+pruning:
+  percentages: [0.1, 0.2, 0.25, 0.3, 0.5]
+
+logging:
+  log_interval: 1000
+
+paths:
+  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"

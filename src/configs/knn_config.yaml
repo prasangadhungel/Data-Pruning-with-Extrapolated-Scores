@@ -1,0 +1,23 @@
+dataset:
+  name: SYNTHETIC_CIFAR100_1M
+  partial: true
+  subset_idxs: ["train"]
+
+scores:
+  full_scores_part1: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_18_2.json
+  full_scores_part2: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_19_2.json
+  original_scores: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json
+
+models:
+  names: ["resnet50-self-trained"]
+  resnet50_self_trained_path: /nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt
+  num_classes: 100
+
+knn:
+  k_values: [50]
+  num_seeds: [5000]
+  distance_metrics: ["cosine", "euclidean"]
+
+output:
+  results_path: /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation.csv
+  knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation

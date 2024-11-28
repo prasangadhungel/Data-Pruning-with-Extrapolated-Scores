@@ -124,6 +124,7 @@ def get_model(model_name: str, num_classes: int):
         model = ResNet50(num_classes=num_classes)
     return model
 
+
 class ResNetEmbedding(nn.Module):
     def __init__(self, model):
         super(ResNetEmbedding, self).__init__()
@@ -134,7 +135,7 @@ class ResNetEmbedding(nn.Module):
             model.layer1,
             model.layer2,
             model.layer3,
-            model.layer4
+            model.layer4,
         )
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
 
@@ -143,6 +144,7 @@ class ResNetEmbedding(nn.Module):
         x = self.pool(x)
         x = torch.flatten(x, 1)
         return x
+
 
 def load_model(model_name, num_classes, model_path, device):
     model = get_model(model_name, num_classes)

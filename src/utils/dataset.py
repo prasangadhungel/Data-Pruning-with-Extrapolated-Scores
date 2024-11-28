@@ -1,6 +1,5 @@
 import inspect
 import json
-from pathlib import Path
 
 import numpy as np
 import torchvision.transforms as transforms
@@ -100,49 +99,6 @@ class CustomDatasetWithIndices(Dataset):
             image = self.transform(image)
 
         return image, label, index
-
-
-# class NPZloader(Dataset):
-#     def __init__(self, npz_path: str, transform=None) -> None:
-#         self.npz_path = Path(npz_path)
-#         self.data = np.load(npz_path)
-
-#         # use torch.from_numpy to convert numpy array to tensor
-#         self.data["image"] = from_numpy(self.data["image"])
-#         self.data["label"] = from_numpy(self.data["label"])
-
-#         # split into train and test
-#         # randomize the data
-#         np.random.seed(0)
-#         indices = np.random.permutation(len(self.data["image"]))
-#         self.data["image"] = self.data["image"][indices]
-#         self.data["label"] = self.data["label"][indices]
-
-#         self.data["image"] = self.data["image"][: int(0.8 * len(self.data["image"]))]
-#         self.data["label"] = self.data["label"][: int(0.8 * len(self.data["label"]))]
-
-#         self.transform = transform
-
-#     def __len__(self) -> int:
-#         return len(self.labels)
-
-#     def __getitem__(self, idx):
-#         """
-#         Retrieves an item from the dataset.
-
-#         Args:
-#             idx (int): The index of the item to retrieve.
-
-#         Returns:
-#             tuple: A tuple containing the image and the mapped class index.
-#         """
-#         image = self.data["image"][idx]
-#         label = self.data["label"][idx]
-#         idx = idx
-#         if self.transform:
-#             image = self.transform(image)
-
-#         return image, label, idx
 
 
 def get_transforms(mean, std, from_numpy=False):
@@ -288,9 +244,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
         mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
         std_cifar100_syn = (0.2748, 0.2640, 0.2858)
 
-        data = np.load(
-            "/nfs/homedirs/dhp/unsupervised-data-pruning/data/1m.npz"
-        )
+        data = np.load("/nfs/homedirs/dhp/unsupervised-data-pruning/data/1m.npz")
 
         num_samples = len(data["label"])
         np.random.seed(40)
@@ -325,7 +279,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
 
             # read json /nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_10.0_percentage.json
             with open(
-                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_99_percentage_pruned.json",
+                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_99_percentage_pruned_knn.json",
                 "r",
             ) as f:
                 indices_dict = json.load(f)
