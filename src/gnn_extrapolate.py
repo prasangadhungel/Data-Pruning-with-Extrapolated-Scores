@@ -110,12 +110,11 @@ def main(cfg: DictConfig):
         embedding_model.eval()
         embeddings_dict = {}
         for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-            if i % 10 == 0:
-                sample, _, sample_idx = trainset[i]
-                sample = sample.to(device).unsqueeze(0)
-                with torch.no_grad():
-                    embedding_val = embedding_model(sample)
-                embeddings_dict[sample_idx] = embedding_val.cpu()
+            sample, _, sample_idx = trainset[i]
+            sample = sample.to(device).unsqueeze(0)
+            with torch.no_grad():
+                embedding_val = embedding_model(sample)
+            embeddings_dict[sample_idx] = embedding_val.cpu()
 
         for k in tqdm(cfg.hyperparams.k_values):
             for num_seed in tqdm(cfg.hyperparams.num_seeds):

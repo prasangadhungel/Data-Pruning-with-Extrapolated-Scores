@@ -9,8 +9,7 @@ from omegaconf import DictConfig
 from torch.optim import Adam
 
 import wandb
-from utils.dataset import (IndexDataset, get_dataloaders_from_dataset,
-                           get_dataset)
+from utils.dataset import IndexDataset, get_dataloaders_from_dataset, get_dataset
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty

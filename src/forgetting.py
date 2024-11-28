@@ -13,8 +13,7 @@ import wandb
 from utils.dataset import IndexDataset, get_transforms
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
-from utils.prune_utils import (get_correct, init_forget_stats,
-                               update_forget_stats)
+from utils.prune_utils import get_correct, init_forget_stats, update_forget_stats
 
 num_classes = 100
 dataset_str = "CIFAR100"
