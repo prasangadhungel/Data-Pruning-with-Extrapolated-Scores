@@ -5,12 +5,11 @@ import hydra
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.optim import Adam
 
 import wandb
-from utils.dataset import (IndexDataset, get_dataloaders_from_dataset,
-                           get_dataset)
+from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty
@@ -21,11 +20,8 @@ def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     for num_itr in range(cfg.experiment.num_iterations):
-        # Load datasets
-        trainset, testset = get_dataset(cfg.dataset.name)
-        indexed_trainset = IndexDataset(trainset)
-        train_loader, test_loader = get_dataloaders_from_dataset(
-            indexed_trainset, testset, batch_size=cfg.training.batch_size
+        trainset, train_loader, test_loader = prepare_data(
+            cfg.dataset, cfg.training.batch_size
         )
 
         # Initialize model and optimizer
@@ -36,7 +32,7 @@ def main(cfg: DictConfig):
 
         # Initialize variables
         uncertainty_window = cfg.uncertainty.window
-        uncertainty_history = {i: [] for i in range(len(indexed_trainset))}
+        uncertainty_history = {sample_idx: [] for _, _, sample_idx in trainset}
 
         torch.cuda.empty_cache()
         start_time = time.time()
@@ -98,9 +94,9 @@ def main(cfg: DictConfig):
             str_prune_percentage = str(int(prune_percentage * 100))
             wandb.init(
                 project=f"{cfg.dataset.name}",
-                name="dynamic-uncertainty-prune-" + str_prune_percentage,
+                name="dynamic-uncertainty-" + str_prune_percentage,
             )
-            wandb.config.update(cfg)
+            wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
             # Get top samples by uncertainty
             sorted_uncertainty_scores = {
                 k: v
@@ -143,7 +139,7 @@ def main(cfg: DictConfig):
                 net.train()
                 train_losses = []
                 for i, data in enumerate(trainloader):
-                    inputs, labels = data
+                    inputs, labels, _ = data
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = net(inputs)
                     loss = criterion(outputs, labels)

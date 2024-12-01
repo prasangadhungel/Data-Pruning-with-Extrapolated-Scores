@@ -250,3 +250,24 @@ def get_dataloaders_from_dataset(trainset, testset, batch_size: int = 128):
     )
 
     return trainloader, testloader
+
+
+def prepare_data(dataset_cfg, batch_size):
+    if dataset_cfg.name == "SYNTHETIC_CIFAR100_1M":
+        trainset, testset = get_dataset(
+            dataset_cfg.name,
+            partial=dataset_cfg.get("partial", False),
+            subset_idxs=dataset_cfg.get("subset", None),
+        )
+        train_loader, _ = get_dataloaders_from_dataset(
+            trainset, testset, batch_size=batch_size
+        )
+        _, test_loader = get_dataloaders("CIFAR100", batch_size=batch_size)
+    else:
+        trainset, testset = get_dataset(dataset_cfg.name)
+        trainset = IndexDataset(trainset)
+        train_loader, test_loader = get_dataloaders_from_dataset(
+            trainset, testset, batch_size=batch_size
+        )
+
+    return trainset, train_loader, test_loader

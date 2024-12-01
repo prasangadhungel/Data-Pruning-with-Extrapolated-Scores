@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from scipy.stats import spearmanr
 from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
@@ -112,7 +112,7 @@ def main(cfg: DictConfig):
                     project=cfg.wandb.project,
                     name=f"k-{k}-num_seed-{num_seed}-model-{model_name}",
                 )
-                wandb.config.update(cfg)
+                wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
                 seed_samples = np.random.choice(
                     list(embeddings_dict.keys()), num_seed, replace=False
                 )

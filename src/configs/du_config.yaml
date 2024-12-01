@@ -2,20 +2,22 @@ experiment:
   num_iterations: 1
 
 dataset:
-  name: "CIFAR10"
+  name: "SYNTHETIC_CIFAR100_1M"
   num_classes: 100
+  partial: true
+  subset: ["train"]
 
 model:
   name: "ResNet50"
 
 training:
   batch_size: 256
-  num_epochs: 60
+  num_epochs: 4
   lr: 0.001
   weight_decay: 0.001
 
 uncertainty:
-  window: 10
+  window: 2
 
 pruning:
   percentages: [0.1, 0.2, 0.25, 0.3, 0.5]
