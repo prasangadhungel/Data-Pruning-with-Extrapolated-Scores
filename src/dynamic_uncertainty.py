@@ -9,13 +9,14 @@ from omegaconf import DictConfig
 from torch.optim import Adam
 
 import wandb
-from utils.dataset import IndexDataset, get_dataloaders_from_dataset, get_dataset
+from utils.dataset import (IndexDataset, get_dataloaders_from_dataset,
+                           get_dataset)
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty
 
 
-@hydra.main(config_path="conf", config_name="du_config")
+@hydra.main(config_path="configs", config_name="du_config")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -99,7 +100,7 @@ def main(cfg: DictConfig):
                 project=f"{cfg.dataset.name}",
                 name="dynamic-uncertainty-prune-" + str_prune_percentage,
             )
-
+            wandb.config.update(cfg)
             # Get top samples by uncertainty
             sorted_uncertainty_scores = {
                 k: v

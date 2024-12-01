@@ -3,8 +3,6 @@ import json
 
 import numpy as np
 import torchvision.transforms as transforms
-
-# import Dataset
 from torch import from_numpy
 from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import CIFAR10, CIFAR100
@@ -163,84 +161,6 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
             root="./data", train=False, download=True, transform=transform_test
         )
 
-    elif dataset_name == "SYNTHETIC_CIFAR100_50":
-        mean_cifar100_syn = (0.5321, 0.5066, 0.4586)
-        std_cifar100_syn = (0.2673, 0.2564, 0.2761)
-
-        data = np.load(
-            "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part1.npz"
-        )
-
-        num_samples = len(data["label"])
-        np.random.seed(40)
-        if not partial:
-            indices = np.random.permutation(num_samples)
-
-            train_images = data["image"][indices[: int(0.8 * num_samples)]]
-            train_labels = data["label"][indices[: int(0.8 * num_samples)]]
-
-            test_images = data["image"][indices[int(0.8 * num_samples) :]]
-            test_labels = data["label"][indices[int(0.8 * num_samples) :]]
-
-            mean_cifar100_syn = (0.5321, 0.5066, 0.4586)
-            std_cifar100_syn = (0.2673, 0.2564, 0.2761)
-
-            transform_train, transform_test = get_transforms(
-                mean_cifar100_syn, std_cifar100_syn, from_numpy=True
-            )
-
-            trainset = CustomDatasetWithIndices(
-                train_images, train_labels, indices, transform=transform_train
-            )
-            testset = CustomDatasetWithIndices(
-                test_images, test_labels, indices, transform=transform_test
-            )
-
-        else:
-            data_files = [
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part1.npz",
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part2.npz",
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part3.npz",
-                "/ceph/ssd/shared/datasets/cifar100_synthetic/cifar100_50m_part4.npz",
-            ]
-            images = []
-            labels = []
-            for file in data_files:
-                data = np.load(file)
-                images.append(data["image"])
-                labels.append(data["label"])
-            images = np.concatenate(images)
-            labels = np.concatenate(labels)
-
-            # read json /nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_10.0_percentage.json
-            with open(
-                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_50M_total_2_percentage.json",
-                "r",
-            ) as f:
-                indices_dict = json.load(f)
-
-            choosen_indices = []
-            for subset_idx in subset_idxs:
-                choosen_indices.extend(indices_dict[str(subset_idx)])
-
-            train_images = images[choosen_indices]
-            train_labels = labels[choosen_indices]
-
-            test_images = images[indices_dict["test"]]
-            test_labels = labels[indices_dict["test"]]
-
-            mean_cifar100_syn = (0.5321, 0.5066, 0.4586)
-            std_cifar100_syn = (0.2673, 0.2564, 0.2761)
-
-            transform_train, transform_test = get_transforms(
-                mean_cifar100_syn, std_cifar100_syn, from_numpy=True
-            )
-
-            trainset = CustomDatasetWithIndices(
-                train_images, train_labels, choosen_indices, transform=transform_train
-            )
-            testset = CustomDataset(test_images, test_labels, transform=transform_test)
-
     elif dataset_name == "SYNTHETIC_CIFAR100_1M":
         mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
         std_cifar100_syn = (0.2748, 0.2640, 0.2858)
@@ -273,8 +193,6 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
             )
 
         else:
-            data = np.load("/nfs/homedirs/dhp/unsupervised-data-pruning/data/1m.npz")
-
             images = data["image"]
             labels = data["label"]
 

@@ -5,7 +5,8 @@ import torch.nn as nn
 from torch.optim import Adam, lr_scheduler
 
 import wandb
-from utils.dataset import get_dataloaders, get_dataloaders_from_dataset, get_dataset
+from utils.dataset import (get_dataloaders, get_dataloaders_from_dataset,
+                           get_dataset)
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
 

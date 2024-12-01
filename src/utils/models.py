@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 
 
 class BasicBlock(nn.Module):
@@ -150,3 +151,17 @@ def load_model(model_name, num_classes, model_path, device):
     model = get_model(model_name, num_classes)
     model.load_state_dict(torch.load(model_path, map_location=device))
     return model
+
+
+def load_model_by_name(model_name, device, path=None):
+    if model_name == "resnet50-self-trained":
+        model = load_model("ResNet50", 100, path, device)
+        embedding_model = ResNetEmbedding(model).to(device)
+
+    elif model_name == "resnet18":
+        embedding_model = torchvision.models.resnet18(pretrained=True).to(device)
+
+    elif model_name == "resnet50":
+        embedding_model = torchvision.models.resnet50(pretrained=True).to(device)
+
+    return embedding_model

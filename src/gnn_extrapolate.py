@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-import torchvision
 from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from sklearn.neighbors import NearestNeighbors
@@ -15,7 +14,7 @@ from tqdm import tqdm
 
 import wandb
 from utils.dataset import get_dataset
-from utils.models import ResNetEmbedding, load_model
+from utils.models import load_model_by_name
 
 
 class GNN(torch.nn.Module):
@@ -97,16 +96,7 @@ def main(cfg: DictConfig):
     results = []
 
     for model_name in tqdm(cfg.models.names):
-        if model_name == "resnet50-self-trained":
-            model = load_model("ResNet50", 100, cfg.models.resnet50.path, device)
-            embedding_model = ResNetEmbedding(model).to(device)
-
-        elif model_name == "resnet18":
-            embedding_model = torchvision.models.resnet18(pretrained=True).to(device)
-
-        elif model_name == "resnet50":
-            embedding_model = torchvision.models.resnet50(pretrained=True).to(device)
-
+        embedding_model = load_model_by_name(model_name, device, cfg.models.model_path)
         embedding_model.eval()
         embeddings_dict = {}
         for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):

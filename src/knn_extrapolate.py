@@ -4,13 +4,12 @@ import hydra
 import numpy as np
 import pandas as pd
 import torch
-import torchvision
 from omegaconf import DictConfig
 from scipy.stats import spearmanr
 from tqdm import tqdm
 
 from utils.dataset import get_dataset
-from utils.models import ResNetEmbedding, load_model
+from utils.models import load_model_by_name
 
 
 def get_correlation(
@@ -107,24 +106,9 @@ def main(cfg: DictConfig):
     spearman_avgs = []
     spearman_weighteds = []
 
-    for model in tqdm(cfg.models.names):
-        if model == "resnet50-self-trained":
-            model_path = cfg.models.resnet50_self_trained_path
-            model_name = "ResNet50"
-            num_classes = cfg.models.num_classes
-            model = load_model(model_name, num_classes, model_path, device)
-            embedding_model = ResNetEmbedding(model).to(device)
-            embedding_model.eval()
-
-        elif model == "resnet18":
-            embedding_model = torchvision.models.resnet18(pretrained=True)
-            embedding_model = embedding_model.to(device)
-            embedding_model.eval()
-
-        elif model == "resnet50":
-            embedding_model = torchvision.models.resnet50(pretrained=True)
-            embedding_model = embedding_model.to(device)
-            embedding_model.eval()
+    for model_name in tqdm(cfg.models.names):
+        embedding_model = load_model_by_name(model_name, device, cfg.models.model_path)
+        embedding_model.eval()
 
         embeddings_dict = {}
 
@@ -156,7 +140,7 @@ def main(cfg: DictConfig):
                         original_score,
                     )
 
-                    models.append(model)
+                    models.append(model_name)
                     ks.append(k)
                     num_seeds.append(num_seed)
                     distance_metrics.append(distance_metric)
@@ -169,7 +153,7 @@ def main(cfg: DictConfig):
                     )
 
                     with open(
-                        f"{cfg.output.knn_dict_path}_{model}_{k}_{num_seed}_{distance_metric}.json",
+                        f"{cfg.output.knn_dict_path}_{model_name}_{k}_{num_seed}_{distance_metric}.json",
                         "w",
                     ) as f:
                         json.dump(knn_dict, f)
