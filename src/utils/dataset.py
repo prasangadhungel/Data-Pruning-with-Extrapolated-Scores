@@ -198,7 +198,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
 
             # read json /nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_10.0_percentage.json
             with open(
-                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_99_percentage_pruned_knn.json",
+                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_99_percentage.json",
                 "r",
             ) as f:
                 indices_dict = json.load(f)

@@ -1,7 +1,15 @@
+import time
 from types import SimpleNamespace
 
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from omegaconf import OmegaConf
+
+import wandb
+from utils.evaluate import evaluate, get_top_k_accuracy
+from utils.models import get_model
 
 
 def calculate_uncertainty(history):
@@ -67,3 +75,94 @@ def get_error(model, X, target, num_classes=10):
     scores = torch.norm(errors, p=2, dim=-1)
     scores = scores.cpu().detach().numpy()
     return scores
+
+
+def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
+    """
+    Prune the dataset based on the uncertainty scores.
+    """
+    for prune_percentage in cfg.pruning.percentages:
+        str_prune_percentage = str(int(prune_percentage * 100))
+        wandb.init(
+            project=cfg.dataset.name,
+            name=wandb_name + str_prune_percentage,
+        )
+        wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
+
+        # sort the uncertainty scores in descending order and get the indices of most uncertain samples
+        sorted_forget_scores = {
+            k: v
+            for k, v in sorted(
+                scores_dict.items(), key=lambda item: item[1], reverse=True
+            )
+        }
+        top_samples = list(sorted_forget_scores.keys())[
+            : int((1 - prune_percentage) * len(sorted_forget_scores))
+        ]
+
+        # Get the indices of the top samples
+        indices_to_keep = [int(sample) for sample in top_samples]
+
+        pruned_trainset = torch.utils.data.Subset(trainset, indices_to_keep)
+
+        trainloader = torch.utils.data.DataLoader(
+            pruned_trainset,
+            batch_size=cfg.training.batch_size,
+            shuffle=True,
+            num_workers=2,
+        )
+
+        # Initialize the ConvNet model
+        net = get_model(cfg.model.name, num_classes=cfg.dataset.num_classes).to(device)
+        # Define the loss function and optimizer
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(
+            net.parameters(),
+            lr=cfg.training.lr,
+            weight_decay=cfg.training.weight_decay,
+        )
+        scheduler = optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=cfg.training.lr,
+            epochs=cfg.training.num_epochs,
+            steps_per_epoch=len(trainloader),
+        )
+
+        torch.cuda.empty_cache()
+        start_time = time.time()
+        for epoch in range(cfg.training.num_epochs):
+            net.train()
+            train_losses = []
+            for i, data in enumerate(trainloader):
+                inputs, labels, _ = data
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = net(inputs)
+                loss = criterion(outputs, labels)
+                train_losses.append(loss)
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                scheduler.step()
+
+            test_acc = evaluate(net, test_loader, device)
+            train_loss = torch.stack(train_losses).mean().item()
+
+            wandb.log({"Loss": train_loss}, step=epoch)
+            wandb.log({"Accuracy": test_acc}, step=epoch)
+            print(
+                f"Epoch {epoch + 1}, Train Loss: {train_loss}, Test Accuracy: {test_acc}"
+            )
+
+        end_time = time.time()
+        training_time = end_time - start_time
+
+        accuracy, top5_accuracy = get_top_k_accuracy(net, test_loader, device, k=5)
+
+        wandb.log = {
+            "Final-Accuracy": accuracy,
+            "Top-5 Accuracy": top5_accuracy,
+            "Training Time": training_time,
+        }
+        print(f"Final Accuracy: {accuracy}, Top-5 Accuracy: {top5_accuracy}")
+
+        wandb.finish()

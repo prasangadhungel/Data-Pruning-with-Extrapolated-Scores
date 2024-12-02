@@ -17,7 +17,8 @@ training:
   weight_decay: 0.001
 
 uncertainty:
-  window: 2
+  num_ensembles: 2
+  prune_epochs: 2
 
 pruning:
   percentages: [0.1, 0.2, 0.5]
