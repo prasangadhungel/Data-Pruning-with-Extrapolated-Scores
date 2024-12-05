@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 
 import hydra
@@ -12,18 +13,19 @@ from utils.evaluate import evaluate
 from utils.models import get_model
 from utils.prune_utils import get_error, prune
 
+logger = logging.getLogger(__name__)
+
 
 @hydra.main(config_path="configs", config_name="el2n_config")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    trainset, train_loader, test_loader = prepare_data(
+        cfg.dataset, cfg.training.batch_size
+    )
+    num_train_examples = len(trainset)
+    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
-        trainset, train_loader, test_loader = prepare_data(
-            cfg.dataset, cfg.training.batch_size
-        )
-
-        num_train_examples = len(trainset)
-
         el2n_scores = {i: [] for i in range(num_train_examples)}
         torch.cuda.empty_cache()
         start_time = time.time()

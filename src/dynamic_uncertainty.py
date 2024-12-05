@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 
 import hydra
@@ -11,16 +12,18 @@ from utils.evaluate import evaluate
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty, prune
 
+logger = logging.getLogger(__name__)
+
 
 @hydra.main(config_path="configs", config_name="du_config")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    trainset, train_loader, test_loader = prepare_data(
+        cfg.dataset, cfg.training.batch_size
+    )
+    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
-        trainset, train_loader, test_loader = prepare_data(
-            cfg.dataset, cfg.training.batch_size
-        )
-
         # Initialize model and optimizer
         model = get_model(
             model_name=cfg.model.name, num_classes=cfg.dataset.num_classes
@@ -33,6 +36,7 @@ def main(cfg: DictConfig):
 
         torch.cuda.empty_cache()
         start_time = time.time()
+        logger.info(f"starting training for iteration {num_itr}")
         for epoch in range(cfg.training.num_epochs):
             train_losses = []
 
@@ -47,8 +51,8 @@ def main(cfg: DictConfig):
                 optimizer.step()
 
                 # Log progress
-                if batch_idx % cfg.logging.log_interval == 0:
-                    print(
+                if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
+                    logger.info(
                         f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
                         f"Iteration {batch_idx}/{len(train_loader)}, "
                         f"Loss: {torch.stack(train_losses).mean().item()}, "
@@ -67,7 +71,7 @@ def main(cfg: DictConfig):
             # Epoch logging
             test_acc = evaluate(model, test_loader, device)
             train_loss = torch.stack(train_losses).mean().item()
-            print(
+            logger.info(
                 f"Epoch {epoch + 1}, Train Loss: {train_loss}, Test Accuracy: {test_acc}"
             )
 
@@ -92,7 +96,7 @@ def main(cfg: DictConfig):
             test_loader=test_loader,
             scores_dict=dynamic_uncertainty,
             cfg=cfg,
-            wandb_name="forgetting-prune",
+            wandb_name="dynamic-uncertainty",
             device=device,
         )
 

@@ -1,4 +1,5 @@
 import json
+import logging
 
 import hydra
 import numpy as np
@@ -16,20 +17,27 @@ import wandb
 from utils.dataset import get_dataset
 from utils.models import load_model_by_name
 
+logger = logging.getLogger(__name__)
+
 
 class GNN(torch.nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, hidden_layers, output_dim):
         super(GNN, self).__init__()
-        self.conv1 = GCNConv(input_dim, 512)
-        self.conv2 = GCNConv(512, 256)
-        self.conv3 = GCNConv(256, output_dim)
+
+        self.convs = torch.nn.ModuleList()
+        self.convs.append(GCNConv(input_dim, hidden_layers[0]))
+
+        for i in range(len(hidden_layers) - 1):
+            self.convs.append(GCNConv(hidden_layers[i], hidden_layers[i + 1]))
+
+        self.convs.append(GCNConv(hidden_layers[-1], output_dim))
 
     def forward(self, x, edge_index, edge_attr):
-        x = self.conv1(x, edge_index, edge_attr)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index, edge_attr)
-        x = F.relu(x)
-        x = self.conv3(x, edge_index, edge_attr)
+        for conv in self.convs[:-1]:
+            x = conv(x, edge_index, edge_attr)
+            x = F.relu(x)
+
+        x = self.convs[-1](x, edge_index, edge_attr)
         return x
 
 
@@ -96,15 +104,18 @@ def main(cfg: DictConfig):
     results = []
 
     for model_name in tqdm(cfg.models.names):
-        embedding_model = load_model_by_name(model_name, device, cfg.models.model_path)
+        embedding_model = load_model_by_name(
+            model_name, device, cfg.models.resnet50.path
+        )
         embedding_model.eval()
         embeddings_dict = {}
         for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-            sample, _, sample_idx = trainset[i]
-            sample = sample.to(device).unsqueeze(0)
-            with torch.no_grad():
-                embedding_val = embedding_model(sample)
-            embeddings_dict[sample_idx] = embedding_val.cpu()
+            if i % 10 == 0:
+                sample, _, sample_idx = trainset[i]
+                sample = sample.to(device).unsqueeze(0)
+                with torch.no_grad():
+                    embedding_val = embedding_model(sample)
+                embeddings_dict[sample_idx] = embedding_val.cpu()
 
         for k in tqdm(cfg.hyperparams.k_values):
             for num_seed in tqdm(cfg.hyperparams.num_seeds):
@@ -124,9 +135,12 @@ def main(cfg: DictConfig):
                     cfg.hyperparams.distance,
                 ).to(device)
 
-                gnn_model = GNN(input_dim=data.num_node_features, output_dim=1).to(
-                    device
-                )
+                gnn_model = GNN(
+                    input_dim=data.num_node_features,
+                    hidden_layers=cfg.hyperparams.gnn.hidden_layers,
+                    output_dim=1,
+                ).to(device)
+
                 optimizer = torch.optim.Adam(
                     gnn_model.parameters(), lr=cfg.hyperparams.lr
                 )

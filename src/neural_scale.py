@@ -1,4 +1,5 @@
 import json
+import logging
 
 import hydra
 import torch
@@ -8,16 +9,19 @@ from sklearn.cluster import KMeans
 from utils.dataset import prepare_data
 from utils.prune_utils import get_embeddings, prune
 
+logger = logging.getLogger(__name__)
+
 
 @hydra.main(config_path="configs", config_name="neural_scale_config")
 def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    trainset, train_loader, test_loader = prepare_data(
+        cfg.dataset, cfg.training.batch_size, embedding=True
+    )
+    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
+
     for num_itr in range(cfg.experiment.num_iterations):
-        # Prepare data
-        trainset, train_loader, test_loader = prepare_data(
-            cfg.dataset, cfg.training.batch_size, embedding=True
-        )
 
         # Load pre-trained self-supervised model (SWaV)
         model = torch.hub.load(

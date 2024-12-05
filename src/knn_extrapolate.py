@@ -1,4 +1,5 @@
 import json
+import logging
 
 import hydra
 import numpy as np
@@ -10,6 +11,8 @@ from tqdm import tqdm
 
 from utils.dataset import get_dataset
 from utils.models import load_model_by_name
+
+logger = logging.getLogger(__name__)
 
 
 def get_correlation(

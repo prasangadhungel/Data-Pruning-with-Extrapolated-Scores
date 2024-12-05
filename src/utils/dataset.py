@@ -5,7 +5,7 @@ import numpy as np
 import torchvision.transforms as transforms
 from torch import from_numpy
 from torch.utils.data import DataLoader, Dataset
-from torchvision.datasets import CIFAR10, CIFAR100
+from torchvision.datasets import CIFAR10, CIFAR100, Places365
 
 
 class NpToTensor(object):
@@ -100,40 +100,60 @@ class CustomDatasetWithIndices(Dataset):
         return image, label, index
 
 
-def get_transforms(mean, std, from_numpy=False):
-    if from_numpy:
+def get_transforms(mean, std, from_numpy=False, dataset_name="CIFAR10"):
+    if dataset_name == "PLACES_365":
         transform_train = transforms.Compose(
             [
-                NpToTensor(),
-                transforms.RandomCrop(32, padding=4),
+                transforms.RandomResizedCrop(224),
                 transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
                 transforms.Normalize(mean, std),
             ]
         )
 
         transform_test = transforms.Compose(
             [
-                NpToTensor(),
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
                 transforms.Normalize(mean, std),
             ]
         )
 
     else:
-        transform_train = transforms.Compose(
-            [
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(mean, std),
-            ]
-        )
+        if from_numpy:
+            transform_train = transforms.Compose(
+                [
+                    NpToTensor(),
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.Normalize(mean, std),
+                ]
+            )
 
-        transform_test = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(mean, std),
-            ]
-        )
+            transform_test = transforms.Compose(
+                [
+                    NpToTensor(),
+                    transforms.Normalize(mean, std),
+                ]
+            )
+
+        else:
+            transform_train = transforms.Compose(
+                [
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean, std),
+                ]
+            )
+
+            transform_test = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean, std),
+                ]
+            )
 
     return transform_train, transform_test
 
@@ -159,6 +179,30 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
         )
         testset = CIFAR100(
             root="./data", train=False, download=True, transform=transform_test
+        )
+
+    elif dataset_name == "PLACES_365":
+        mean_places365 = (0.485, 0.456, 0.406)
+        std_places365 = (0.229, 0.224, 0.225)
+        root_dir = "/nfs/homedirs/dhp/unsupervised-data-pruning/data/places-365"
+        transform_train, transform_test = get_transforms(
+            mean_places365,
+            std_places365,
+            dataset_name=dataset_name,
+        )
+        trainset = Places365(
+            root=root_dir,
+            split="train-standard",
+            download=False,
+            small=True,
+            transform=transform_train,
+        )
+        testset = Places365(
+            root=root_dir,
+            split="val",
+            download=False,
+            small=True,
+            transform=transform_test,
         )
 
     elif dataset_name == "SYNTHETIC_CIFAR100_1M":

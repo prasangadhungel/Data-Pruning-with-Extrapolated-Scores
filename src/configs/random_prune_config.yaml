@@ -1,23 +1,52 @@
+# For Synthetic CIFAR100 1M dataset
+# experiment:
+#   num_iterations: 1
+
+# dataset:
+#   name: "SYNTHETIC_CIFAR100_1M"
+#   num_classes: 100
+#   partial: true
+#   subset: ["train"]
+
+# model:
+#   name: "ResNet50"
+
+# training:
+#   batch_size: 256
+#   num_epochs: 3
+#   lr: 0.001
+#   weight_decay: 0.001
+
+# pruning:
+#   percentages: [0, 0.1, 0.2, 0.5]
+
+# logging:
+#   log_interval: 1000
+
+# paths:
+#   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"
+
+# For PLACES365 dataset
 experiment:
   num_iterations: 1
 
 dataset:
-  name: "SYNTHETIC_CIFAR100_1M"
-  num_classes: 100
-  partial: true
-  subset: ["train"]
+  name: "PLACES_365"
+  num_classes: 365
+  partial: false
+  subset: []
 
 model:
   name: "ResNet50"
 
 training:
-  batch_size: 256
-  num_epochs: 3
+  batch_size: 128
+  num_epochs: 50
   lr: 0.001
   weight_decay: 0.001
 
 pruning:
-  percentages: [0.1, 0.2, 0.5]
+  percentages: [0, 0.1, 0.2, 0.5]
 
 logging:
   log_interval: 1000
