@@ -1,12 +1,12 @@
+import argparse
 import json
 import logging
 
-import hydra
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 from scipy.stats import spearmanr
 from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
@@ -88,8 +88,9 @@ def prepare_data(
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, train_mask=mask)
 
 
-@hydra.main(config_path="configs", config_name="gnn_config")
-def main(cfg: DictConfig):
+def main(cfg_path: str, cfg_name: str):
+    # Load the configuration using OmegaConf
+    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, _ = get_dataset(
@@ -153,8 +154,8 @@ def main(cfg: DictConfig):
                     loss.backward()
                     optimizer.step()
 
-                    if epoch % 100 == 0:
-                        print(f"GNN Epoch: {epoch}, Loss: {loss.item()}")
+                    if epoch % 200 == 0:
+                        logger.info(f"GNN Epoch: {epoch}, Loss: {loss.item()}")
 
                     wandb.log({"Train Loss": loss.item()}, step=epoch)
 
@@ -187,4 +188,19 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run GNN Pruning")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs",
+        help="Path to the configuration files (default: configs)",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="gnn_config",
+        help="Name of the configuration file (without .yaml extension) (default: gnn_config)",
+    )
+    args = parser.parse_args()
+
+    main(cfg_path=args.config_path, cfg_name=args.config_name)

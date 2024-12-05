@@ -1,10 +1,10 @@
+import argparse
 import json
 import logging
 import time
 
-import hydra
 import torch
-from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from torch.optim import Adam
 
 from utils.dataset import prepare_data
@@ -15,13 +15,14 @@ from utils.prune_utils import calculate_uncertainty, prune
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="du_config")
-def main(cfg: DictConfig):
+def main(cfg_path: str, cfg_name: str):
+    # Load the configuration using Hydra or OmegaConf
+    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
-    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
+    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
         # Initialize model and optimizer
@@ -36,7 +37,7 @@ def main(cfg: DictConfig):
 
         torch.cuda.empty_cache()
         start_time = time.time()
-        logger.info(f"starting training for iteration {num_itr}")
+        logger.info(f"Starting training for iteration {num_itr}")
         for epoch in range(cfg.training.num_epochs):
             train_losses = []
 
@@ -102,4 +103,19 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run Dynamic Uncertainty Training")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs",
+        help="Path to the configuration files (default: configs)",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="du_config",
+        help="Name of the configuration file (without .yaml extension) (default: du_config)",
+    )
+    args = parser.parse_args()
+
+    main(cfg_path=args.config_path, cfg_name=args.config_name)

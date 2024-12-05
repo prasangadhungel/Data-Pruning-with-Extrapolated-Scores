@@ -1,9 +1,9 @@
+import argparse
 import json
 import logging
 
-import hydra
 import torch
-from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from sklearn.cluster import KMeans
 
 from utils.dataset import prepare_data
@@ -12,14 +12,15 @@ from utils.prune_utils import get_embeddings, prune
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="neural_scale_config")
-def main(cfg: DictConfig):
+def main(cfg_path: str, cfg_name: str):
+    # Load the configuration using OmegaConf
+    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, train_loader, test_loader = prepare_data(
         cfg.dataset, cfg.training.batch_size, embedding=True
     )
-    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
+    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
 
@@ -38,9 +39,8 @@ def main(cfg: DictConfig):
         kmeans.fit(embeddings.numpy())
 
         # Compute distances for pruning scores
-        distances = {}
-        for i, embedding in enumerate(embeddings):
-            distances[i] = (
+        distances = {
+            i: (
                 1
                 - torch.nn.functional.cosine_similarity(
                     embedding.unsqueeze(0),
@@ -48,12 +48,14 @@ def main(cfg: DictConfig):
                     dim=1,
                 ).item()
             )
+            for i, embedding in enumerate(embeddings)
+        }
 
         # Save distances as JSON
-        with open(
-            f"{cfg.paths.scores}/{cfg.dataset.name}_embedding_distances_{num_itr}.json",
-            "w",
-        ) as f:
+        output_path = (
+            f"{cfg.paths.scores}/{cfg.dataset.name}_embedding_distances_{num_itr}.json"
+        )
+        with open(output_path, "w") as f:
             json.dump(distances, f)
 
         # Perform pruning and retraining for each prune percentage
@@ -68,4 +70,19 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run Neural Scale Pruning")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs",
+        help="Path to the configuration files (default: configs)",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="neural_scale_config",
+        help="Name of the configuration file (without .yaml extension) (default: neural_scale_config)",
+    )
+    args = parser.parse_args()
+
+    main(cfg_path=args.config_path, cfg_name=args.config_name)

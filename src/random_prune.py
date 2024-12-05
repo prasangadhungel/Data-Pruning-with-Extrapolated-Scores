@@ -1,12 +1,12 @@
+import argparse
 import logging
 import random
 import time
 
-import hydra
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 import wandb
 from utils.dataset import prepare_data
@@ -16,15 +16,16 @@ from utils.models import get_model
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="random_prune_config")
-def main(cfg: DictConfig):
+def main(cfg_path: str, cfg_name: str):
+    # Load the configuration using OmegaConf
+    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
     logger.info("Random Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
     num_samples = len(trainset)
-    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
+    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
         for prune_percentage in cfg.pruning.percentages:
@@ -36,7 +37,6 @@ def main(cfg: DictConfig):
                 wandb_name = f"random-prune-{str_prune_percentage}"
                 frac_to_keep = 1 - prune_percentage
                 num_samples_to_keep = int(frac_to_keep * num_samples)
-                # Generate a random list of indices to keep
                 indices_to_keep = random.sample(range(num_samples), num_samples_to_keep)
                 pruned_trainset = torch.utils.data.Subset(trainset, indices_to_keep)
                 train_loader = torch.utils.data.DataLoader(
@@ -73,7 +73,7 @@ def main(cfg: DictConfig):
 
             torch.cuda.empty_cache()
             start_time = time.time()
-            logger.info(f"starting training")
+            logger.info("Starting training")
             for epoch in range(cfg.training.num_epochs):
                 model.train()
                 train_losses = []
@@ -131,4 +131,19 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run Random Pruning")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs",
+        help="Path to the configuration files (default: configs)",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="random_prune_config",
+        help="Name of the configuration file (without .yaml extension) (default: random_prune_config)",
+    )
+    args = parser.parse_args()
+
+    main(cfg_path=args.config_path, cfg_name=args.config_name)

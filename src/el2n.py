@@ -1,11 +1,11 @@
+import argparse
 import json
 import logging
 import time
 
-import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from torch.optim import Adam
 
 from utils.dataset import prepare_data
@@ -16,14 +16,15 @@ from utils.prune_utils import get_error, prune
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="el2n_config")
-def main(cfg: DictConfig):
+def main(cfg_path: str, cfg_name: str):
+    # Load the configuration using OmegaConf
+    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
     num_train_examples = len(trainset)
-    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
+    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
         el2n_scores = {i: [] for i in range(num_train_examples)}
@@ -50,7 +51,7 @@ def main(cfg: DictConfig):
 
                 test_acc = evaluate(model, test_loader, device)
                 train_loss = torch.stack(train_losses).mean().item()
-                print(
+                logger.info(
                     f"Model - {model_idx+1}, Epoch {epoch + 1}, Train Loss: {train_loss}, Test Accuracy: {test_acc}"
                 )
 
@@ -63,19 +64,17 @@ def main(cfg: DictConfig):
                     sample = sample.item()
                     el2n_scores[sample].append(scores[i])
 
-        # take average of scores
-        el2n_values = {}
-        for sample, scores in el2n_scores.items():
-            el2n_values[sample] = np.mean(scores).item()
+        # Take average of scores
+        el2n_values = {
+            sample: np.mean(scores).item() for sample, scores in el2n_scores.items()
+        }
 
         end_time = time.time()
         training_time = end_time - start_time
-        print(f"Training time: {training_time:.2f} seconds")
+        logger.info(f"Training time: {training_time:.2f} seconds")
 
-        with open(
-            f"{cfg.paths.scores}/{cfg.dataset.name}_el2n_score_{num_itr}.json",
-            "w",
-        ) as f:
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_el2n_score_{num_itr}.json"
+        with open(output_path, "w") as f:
             json.dump(el2n_values, f)
 
         prune(
@@ -83,10 +82,25 @@ def main(cfg: DictConfig):
             test_loader=test_loader,
             scores_dict=el2n_values,
             cfg=cfg,
-            wandb_name="forgetting-prune",
+            wandb_name="el2n",
             device=device,
         )
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run EL2N Pruning")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs",
+        help="Path to the configuration files (default: configs)",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="el2n_config",
+        help="Name of the configuration file (without .yaml extension) (default: el2n_config)",
+    )
+    args = parser.parse_args()
+
+    main(cfg_path=args.config_path, cfg_name=args.config_name)

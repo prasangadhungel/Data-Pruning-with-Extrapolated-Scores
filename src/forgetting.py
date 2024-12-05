@@ -1,11 +1,11 @@
+import argparse
 import json
 import logging
 import time
 
-import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from torch.optim import Adam
 
 from utils.dataset import prepare_data
@@ -17,14 +17,15 @@ from utils.prune_utils import (get_correct, init_forget_stats, prune,
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="forget_config")
-def main(cfg: DictConfig):
+def main(cfg_path: str, cfg_name: str):
+    # Load the configuration using OmegaConf
+    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
     num_train_examples = len(trainset)
-    logger.info(f"loaded dataset: {cfg.dataset.name}, device: {device}")
+    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
         # Initialize model and optimizer
@@ -55,7 +56,7 @@ def main(cfg: DictConfig):
                 forget_stats = update_forget_stats(forget_stats, sample_idx, batch_accs)
 
                 if batch_idx % cfg.logging.log_interval == 0:
-                    print(
+                    logger.info(
                         f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
                         f"Iteration {batch_idx}/{len(train_loader)}, "
                         f"Loss: {torch.stack(train_losses).mean().item()}, "
@@ -65,9 +66,9 @@ def main(cfg: DictConfig):
 
         end_time = time.time()
         training_time = end_time - start_time
-        print(f"Training time: {training_time:.2f} seconds")
+        logger.info(f"Training time: {training_time:.2f} seconds")
 
-        # save forget stats as dict of idx: stat
+        # Save forget stats as dict of idx: stat
         forget_stats_dict = {
             i: forget_stats.num_forgets[i] for i in range(num_train_examples)
         }
@@ -75,10 +76,7 @@ def main(cfg: DictConfig):
         output_path = (
             f"{cfg.paths.scores}/{cfg.dataset.name}_forget_score_{num_itr}.json"
         )
-        with open(
-            output_path,
-            "w",
-        ) as f:
+        with open(output_path, "w") as f:
             json.dump(forget_stats_dict, f)
 
         prune(
@@ -92,4 +90,19 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run Forget Pruning")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs",
+        help="Path to the configuration files (default: configs)",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="forget_config",
+        help="Name of the configuration file (without .yaml extension) (default: forget_config)",
+    )
+    args = parser.parse_args()
+
+    main(cfg_path=args.config_path, cfg_name=args.config_name)
