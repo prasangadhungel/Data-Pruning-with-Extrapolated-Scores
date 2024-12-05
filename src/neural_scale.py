@@ -64,7 +64,7 @@ def main(cfg_path: str, cfg_name: str):
             test_loader=test_loader,
             scores_dict=distances,
             cfg=cfg,
-            wandb_name="neural-scale-prune",
+            wandb_name="neural-scale",
             device=device,
         )
 
