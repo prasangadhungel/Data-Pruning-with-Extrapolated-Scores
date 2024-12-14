@@ -1,6 +1,6 @@
-import argparse
 import json
 import logging
+import os
 
 import numpy as np
 import pandas as pd
@@ -9,8 +9,9 @@ from omegaconf import OmegaConf
 from scipy.stats import spearmanr
 from tqdm import tqdm
 
-from utils.dataset import get_dataset
-from utils.models import load_model_by_name
+from prune.utils.argparse import parse_config
+from prune.utils.dataset import get_dataset
+from prune.utils.models import load_model_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +76,8 @@ def get_correlation(
     return corr_avg, corr_weighted, spearman_avg, spearman_weighted, knn_dict
 
 
-def main(cfg_path: str, cfg_name: str):
-    # Load the configuration using OmegaConf
-    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, _ = get_dataset(
         cfg.dataset.name,
@@ -85,6 +85,7 @@ def main(cfg_path: str, cfg_name: str):
         subset_idxs=cfg.dataset.subset_idxs,
     )
 
+    # Load full scores and original scores
     with open(cfg.scores.full_scores_part1) as f:
         full_scores_dict_1 = json.load(f)
     with open(cfg.scores.full_scores_part2) as f:
@@ -113,6 +114,7 @@ def main(cfg_path: str, cfg_name: str):
         for k in tqdm(cfg.knn.k_values):
             for num_seed in tqdm(cfg.knn.num_seeds):
                 for distance_metric in tqdm(cfg.knn.distance_metrics):
+
                     (
                         corr_avg,
                         corr_weighted,
@@ -136,6 +138,9 @@ def main(cfg_path: str, cfg_name: str):
                     corr_weighteds.append(corr_weighted)
                     spearman_avgs.append(spearman_avg)
                     spearman_weighteds.append(spearman_weighted)
+                    logger.info(
+                        f"k: {k}, num_seed: {num_seed}, distance_metric: {distance_metric}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}"
+                    )
 
                     with open(
                         f"{cfg.output.knn_dict_path}_{model_name}_{k}_{num_seed}_{distance_metric}.json",
@@ -159,19 +164,10 @@ def main(cfg_path: str, cfg_name: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run KNN Correlation Analysis")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="configs",
-        help="Path to the configuration files (default: configs)",
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "knn_config.yaml"
     )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default="knn_config",
-        help="Name of the configuration file (without .yaml extension) (default: knn_config)",
+    config_path = parse_config(
+        default_config=default_config_path, description="Run KNN Extrapolation"
     )
-    args = parser.parse_args()
-
-    main(cfg_path=args.config_path, cfg_name=args.config_name)
+    main(cfg_path=config_path)

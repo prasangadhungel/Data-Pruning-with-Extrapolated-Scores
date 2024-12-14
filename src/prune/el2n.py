@@ -1,13 +1,13 @@
-import argparse
 import json
 import logging
+import os
 import time
 
 import numpy as np
 import torch
 from omegaconf import OmegaConf
 from torch.optim import Adam
-
+from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
@@ -16,15 +16,13 @@ from utils.prune_utils import get_error, prune
 logger = logging.getLogger(__name__)
 
 
-def main(cfg_path: str, cfg_name: str):
-    # Load the configuration using OmegaConf
-    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trainset, train_loader, test_loader = prepare_data(
+    trainset, train_loader, test_loader, num_train_examples = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
-    num_train_examples = len(trainset)
-    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
+    logger.info(f"Loaded Dataset: {cfg.dataset.name}, device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
         el2n_scores = {i: [] for i in range(num_train_examples)}
@@ -88,19 +86,10 @@ def main(cfg_path: str, cfg_name: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run EL2N Pruning")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="configs",
-        help="Path to the configuration files (default: configs)",
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "el2n_config.yaml"
     )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default="el2n_config",
-        help="Name of the configuration file (without .yaml extension) (default: el2n_config)",
+    config_path = parse_config(
+        default_config=default_config_path, description="Run EL2N Pruning"
     )
-    args = parser.parse_args()
-
-    main(cfg_path=args.config_path, cfg_name=args.config_name)
+    main(cfg_path=config_path)

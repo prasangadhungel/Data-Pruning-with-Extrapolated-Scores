@@ -1,6 +1,6 @@
-import argparse
 import json
 import logging
+import os
 
 import numpy as np
 import pandas as pd
@@ -14,8 +14,9 @@ from torch_geometric.nn import GCNConv
 from tqdm import tqdm
 
 import wandb
-from utils.dataset import get_dataset
-from utils.models import load_model_by_name
+from prune.utils.argparse import parse_config
+from prune.utils.dataset import get_dataset
+from prune.utils.models import load_model_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,59 @@ class GNN(torch.nn.Module):
 
         x = self.convs[-1](x, edge_index, edge_attr)
         return x
+
+
+class GNNFactory:
+    @staticmethod
+    def create_gnn(gnn_type, input_dim, hidden_layers, output_dim):
+        if gnn_type == "gcn":
+            return GNN(input_dim, hidden_layers, output_dim)
+        elif gnn_type == "gat":
+            from torch_geometric.nn import GATConv
+
+            class GAT(torch.nn.Module):
+                def __init__(self, input_dim, hidden_layers, output_dim):
+                    super(GAT, self).__init__()
+                    self.convs = torch.nn.ModuleList()
+                    self.convs.append(GATConv(input_dim, hidden_layers[0]))
+                    for i in range(len(hidden_layers) - 1):
+                        self.convs.append(
+                            GATConv(hidden_layers[i], hidden_layers[i + 1])
+                        )
+                    self.convs.append(GATConv(hidden_layers[-1], output_dim))
+
+                def forward(self, x, edge_index, edge_attr):
+                    for conv in self.convs[:-1]:
+                        x = conv(x, edge_index)
+                        x = F.relu(x)
+                    x = self.convs[-1](x, edge_index)
+                    return x
+
+            return GAT(input_dim, hidden_layers, output_dim)
+        elif gnn_type == "sage":
+            from torch_geometric.nn import SAGEConv
+
+            class GraphSAGE(torch.nn.Module):
+                def __init__(self, input_dim, hidden_layers, output_dim):
+                    super(GraphSAGE, self).__init__()
+                    self.convs = torch.nn.ModuleList()
+                    self.convs.append(SAGEConv(input_dim, hidden_layers[0]))
+                    for i in range(len(hidden_layers) - 1):
+                        self.convs.append(
+                            SAGEConv(hidden_layers[i], hidden_layers[i + 1])
+                        )
+                    self.convs.append(SAGEConv(hidden_layers[-1], output_dim))
+
+                def forward(self, x, edge_index):
+                    for conv in self.convs[:-1]:
+                        x = conv(x, edge_index)
+                        x = F.relu(x)
+                    x = self.convs[-1](x, edge_index)
+                    return x
+
+            return GraphSAGE(input_dim, hidden_layers, output_dim)
+        else:
+            raise ValueError(f"Unknown GNN type: {gnn_type}")
 
 
 def get_edges_and_attributes(embeddings, k=10, distance="euclidean"):
@@ -88,9 +142,8 @@ def prepare_data(
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, train_mask=mask)
 
 
-def main(cfg_path: str, cfg_name: str):
-    # Load the configuration using OmegaConf
-    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, _ = get_dataset(
@@ -111,12 +164,11 @@ def main(cfg_path: str, cfg_name: str):
         embedding_model.eval()
         embeddings_dict = {}
         for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-            if i % 10 == 0:
-                sample, _, sample_idx = trainset[i]
-                sample = sample.to(device).unsqueeze(0)
-                with torch.no_grad():
-                    embedding_val = embedding_model(sample)
-                embeddings_dict[sample_idx] = embedding_val.cpu()
+            sample, _, sample_idx = trainset[i]
+            sample = sample.to(device).unsqueeze(0)
+            with torch.no_grad():
+                embedding_val = embedding_model(sample)
+            embeddings_dict[sample_idx] = embedding_val.cpu()
 
         for k in tqdm(cfg.hyperparams.k_values):
             for num_seed in tqdm(cfg.hyperparams.num_seeds):
@@ -136,7 +188,8 @@ def main(cfg_path: str, cfg_name: str):
                     cfg.hyperparams.distance,
                 ).to(device)
 
-                gnn_model = GNN(
+                gnn_model = GNNFactory.create_gnn(
+                    cfg.hyperparams.gnn.type,
                     input_dim=data.num_node_features,
                     hidden_layers=cfg.hyperparams.gnn.hidden_layers,
                     output_dim=1,
@@ -188,19 +241,10 @@ def main(cfg_path: str, cfg_name: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run GNN Pruning")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="configs",
-        help="Path to the configuration files (default: configs)",
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "gnn_config.yaml"
     )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default="gnn_config",
-        help="Name of the configuration file (without .yaml extension) (default: gnn_config)",
+    config_path = parse_config(
+        default_config=default_config_path, description="Run GNN Extrapolation"
     )
-    args = parser.parse_args()
-
-    main(cfg_path=args.config_path, cfg_name=args.config_name)
+    main(cfg_path=config_path)

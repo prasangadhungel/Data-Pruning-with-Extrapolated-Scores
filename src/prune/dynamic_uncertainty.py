@@ -1,25 +1,25 @@
-import argparse
 import json
 import logging
+import os
 import time
 
 import torch
 from omegaconf import OmegaConf
 from torch.optim import Adam
-
+from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty, prune
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
 
 
-def main(cfg_path: str, cfg_name: str):
-    # Load the configuration using Hydra or OmegaConf
-    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trainset, train_loader, test_loader = prepare_data(
+    trainset, train_loader, test_loader, _ = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
@@ -55,10 +55,10 @@ def main(cfg_path: str, cfg_name: str):
                 if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
                     logger.info(
                         f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
-                        f"Iteration {batch_idx}/{len(train_loader)}, "
-                        f"Loss: {torch.stack(train_losses).mean().item()}, "
-                        f"Test Accuracy: {evaluate(model, test_loader, device)}, "
-                        f"Time: {time.time() - start_time}"
+                        f"Itr {batch_idx}/{len(train_loader)}, "
+                        f"Loss: {torch.stack(train_losses).mean().item():.5f}, "
+                        f"Test Acc: {evaluate(model, test_loader, device):.5f}, "
+                        f"Time: {time.time() - start_time:.5f}"
                     )
 
                 # Update uncertainty history
@@ -73,7 +73,7 @@ def main(cfg_path: str, cfg_name: str):
             test_acc = evaluate(model, test_loader, device)
             train_loss = torch.stack(train_losses).mean().item()
             logger.info(
-                f"Epoch {epoch + 1}, Train Loss: {train_loss}, Test Accuracy: {test_acc}"
+                f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Acc: {test_acc:.5f}"
             )
 
         # Save dynamic uncertainty scores
@@ -103,19 +103,11 @@ def main(cfg_path: str, cfg_name: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Dynamic Uncertainty Training")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="configs",
-        help="Path to the configuration files (default: configs)",
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "du_config.yaml"
     )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default="du_config",
-        help="Name of the configuration file (without .yaml extension) (default: du_config)",
+    config_path = parse_config(
+        default_config=default_config_path,
+        description="Run Dynamic Uncertainty Pruning",
     )
-    args = parser.parse_args()
-
-    main(cfg_path=args.config_path, cfg_name=args.config_name)
+    main(cfg_path=config_path)

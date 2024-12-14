@@ -1,13 +1,13 @@
-import argparse
 import json
 import logging
+import os
 import time
 
 import numpy as np
 import torch
 from omegaconf import OmegaConf
 from torch.optim import Adam
-
+from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
@@ -15,16 +15,16 @@ from utils.prune_utils import (get_correct, init_forget_stats, prune,
                                update_forget_stats)
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
 
 
-def main(cfg_path: str, cfg_name: str):
-    # Load the configuration using OmegaConf
-    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trainset, train_loader, test_loader = prepare_data(
+    trainset, train_loader, test_loader, num_train_examples = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
-    num_train_examples = len(trainset)
+
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
@@ -55,14 +55,20 @@ def main(cfg_path: str, cfg_name: str):
                 )
                 forget_stats = update_forget_stats(forget_stats, sample_idx, batch_accs)
 
-                if batch_idx % cfg.logging.log_interval == 0:
+                if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
                     logger.info(
                         f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
-                        f"Iteration {batch_idx}/{len(train_loader)}, "
-                        f"Loss: {torch.stack(train_losses).mean().item()}, "
-                        f"Test Accuracy: {evaluate(model, test_loader, device)}, "
-                        f"Time: {time.time() - start_time}"
+                        f"Itr {batch_idx}/{len(train_loader)}, "
+                        f"Loss: {torch.stack(train_losses).mean().item():.5f}, "
+                        f"Test Acc: {evaluate(model, test_loader, device):.5f}, "
+                        f"Time: {time.time() - start_time:.5f}"
                     )
+
+            test_acc = evaluate(model, test_loader, device)
+            train_loss = torch.stack(train_losses).mean().item()
+            logger.info(
+                f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Accuracy: {test_acc:.5f}"
+            )
 
         end_time = time.time()
         training_time = end_time - start_time
@@ -84,25 +90,16 @@ def main(cfg_path: str, cfg_name: str):
             test_loader=test_loader,
             scores_dict=forget_stats_dict,
             cfg=cfg,
-            wandb_name="forgetting-prune",
+            wandb_name="forgetting-prune-t1",
             device=device,
         )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Forget Pruning")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="configs",
-        help="Path to the configuration files (default: configs)",
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "forget_config.yaml"
     )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default="forget_config",
-        help="Name of the configuration file (without .yaml extension) (default: forget_config)",
+    config_path = parse_config(
+        default_config=default_config_path, description="Run Forget Pruning"
     )
-    args = parser.parse_args()
-
-    main(cfg_path=args.config_path, cfg_name=args.config_name)
+    main(cfg_path=config_path)

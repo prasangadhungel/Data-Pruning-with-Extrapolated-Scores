@@ -1,30 +1,29 @@
-import argparse
 import logging
+import os
 import random
 import time
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from omegaconf import OmegaConf
-
-import wandb
+from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
 
+import wandb
+
 logger = logging.getLogger(__name__)
+logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
 
 
-def main(cfg_path: str, cfg_name: str):
-    # Load the configuration using OmegaConf
-    cfg = OmegaConf.load(f"{cfg_path}/{cfg_name}.yaml")
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
     logger.info("Random Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trainset, train_loader, test_loader = prepare_data(
+    trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
-    num_samples = len(trainset)
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     for num_itr in range(cfg.experiment.num_iterations):
@@ -32,9 +31,9 @@ def main(cfg_path: str, cfg_name: str):
             str_prune_percentage = str(int(prune_percentage * 100))
             if prune_percentage == 0:
                 logger.info("Unpruned Training")
-                wandb_name = "unpruned"
+                wandb_name = "unpruned-transform1"
             else:
-                wandb_name = f"random-prune-{str_prune_percentage}"
+                wandb_name = f"random-prune-{str_prune_percentage}-transform1"
                 frac_to_keep = 1 - prune_percentage
                 num_samples_to_keep = int(frac_to_keep * num_samples)
                 indices_to_keep = random.sample(range(num_samples), num_samples_to_keep)
@@ -58,7 +57,6 @@ def main(cfg_path: str, cfg_name: str):
             )
 
             # Define the loss function, optimizer, and scheduler
-            criterion = nn.CrossEntropyLoss()
             optimizer = optim.Adam(
                 model.parameters(),
                 lr=cfg.training.lr,
@@ -81,12 +79,12 @@ def main(cfg_path: str, cfg_name: str):
                 for batch_idx, (data, target, sample_idx) in enumerate(train_loader):
                     data, target = data.to(device), target.to(device)
                     output = model(data)
-                    loss = criterion(output, target)
-                    train_losses.append(loss)
+                    loss = torch.nn.functional.cross_entropy(output, target)
 
+                    optimizer.zero_grad()
+                    train_losses.append(loss)
                     loss.backward()
                     optimizer.step()
-                    optimizer.zero_grad()
                     scheduler.step()
 
                     if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
@@ -94,7 +92,7 @@ def main(cfg_path: str, cfg_name: str):
                             f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
                             f"Iteration {batch_idx}/{len(train_loader)}, "
                             f"Loss: {torch.stack(train_losses).mean().item()}, "
-                            f"Test Accuracy: {evaluate(model, test_loader, device)}, "
+                            f"Test Acc: {evaluate(model, test_loader, device)}, "
                             f"Time: {time.time() - start_time}"
                         )
 
@@ -105,7 +103,7 @@ def main(cfg_path: str, cfg_name: str):
                 wandb.log({"Accuracy": test_acc}, step=epoch)
 
                 logger.info(
-                    f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}, Test Accuracy: {test_acc:.4f}"
+                    f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}, Test Acc: {test_acc:.4f}"
                 )
 
             # Final metrics
@@ -123,27 +121,16 @@ def main(cfg_path: str, cfg_name: str):
                     "Training Time": training_time,
                 }
             )
-            logger.info(
-                f"Final Accuracy: {accuracy:.4f}, Top-5 Accuracy: {top5_accuracy:.4f}"
-            )
+            logger.info(f"Final Acc: {accuracy:.4f}, Top-5 Acc: {top5_accuracy:.4f}")
 
             wandb.finish()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Random Pruning")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="configs",
-        help="Path to the configuration files (default: configs)",
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "random_prune_config.yaml"
     )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default="random_prune_config",
-        help="Name of the configuration file (without .yaml extension) (default: random_prune_config)",
+    config_path = parse_config(
+        default_config=default_config_path, description="Run Random Pruning"
     )
-    args = parser.parse_args()
-
-    main(cfg_path=args.config_path, cfg_name=args.config_name)
+    main(cfg_path=config_path)

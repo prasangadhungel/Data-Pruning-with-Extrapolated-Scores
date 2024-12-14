@@ -1,4 +1,4 @@
-# for SYNTHETIC_CIFAR100_1M dataset
+# For Synthetic CIFAR100 1M dataset
 # experiment:
 #   num_iterations: 1
 
@@ -13,15 +13,12 @@
 
 # training:
 #   batch_size: 256
-#   num_epochs: 4
+#   num_epochs: 3
 #   lr: 0.001
 #   weight_decay: 0.001
 
-# uncertainty:
-#   window: 2
-
 # pruning:
-#   percentages: [0.1, 0.2, 0.5]
+#   percentages: [0, 0.1, 0.2, 0.5]
 
 # logging:
 #   log_interval: 1000
@@ -29,7 +26,7 @@
 # paths:
 #   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"
 
-# for PLACES365 dataset
+# For PLACES365 dataset
 experiment:
   num_iterations: 1
 
@@ -48,14 +45,11 @@ training:
   lr: 0.001
   weight_decay: 0.001
 
-uncertainty:
-  window: 10
-
 pruning:
-  percentages: [0.1, 0.2, 0.5]
+  percentages: [0, 0.1, 0.2, 0.5]
 
 logging:
-  log_interval: 5000
+  log_interval: 15000
 
 paths:
   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"

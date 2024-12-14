@@ -102,9 +102,29 @@ class CustomDatasetWithIndices(Dataset):
 
 def get_transforms(mean, std, from_numpy=False, dataset_name="CIFAR10"):
     if dataset_name == "PLACES_365":
+        # transform_train = transforms.Compose(
+        #     [
+        #         transforms.RandomResizedCrop(224),
+        #         transforms.RandomHorizontalFlip(),
+        #         transforms.ToTensor(),
+        #         transforms.Normalize(mean, std),
+        #     ]
+        # )
+
+        # transform_test = transforms.Compose(
+        #     [
+        #         transforms.Resize(256),
+        #         transforms.CenterCrop(224),
+        #         transforms.ToTensor(),
+        #         transforms.Normalize(mean, std),
+        #     ]
+        # )
+
+        # TRANSFORMATION1
         transform_train = transforms.Compose(
             [
-                transforms.RandomResizedCrop(224),
+                transforms.Resize(80),
+                transforms.RandomCrop(64),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
@@ -113,12 +133,26 @@ def get_transforms(mean, std, from_numpy=False, dataset_name="CIFAR10"):
 
         transform_test = transforms.Compose(
             [
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
+                transforms.Resize(80),
+                transforms.CenterCrop(64),
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
             ]
         )
+
+        # TRANSFORMATION2
+        # transform_train = transforms.Compose([
+        #     transforms.RandomResizedCrop(64),
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(mean, std),
+        # ])
+
+        # transform_test = transforms.Compose([
+        #     transforms.Resize(64),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(mean, std),
+        # ])
 
     else:
         if from_numpy:
@@ -307,11 +341,13 @@ def prepare_data(dataset_cfg, batch_size):
             trainset, testset, batch_size=batch_size
         )
         _, test_loader = get_dataloaders("CIFAR100", batch_size=batch_size)
+        num_train_examples = len(trainset)
+
     else:
         trainset, testset = get_dataset(dataset_cfg.name)
         trainset = IndexDataset(trainset)
         train_loader, test_loader = get_dataloaders_from_dataset(
             trainset, testset, batch_size=batch_size
         )
-
-    return trainset, train_loader, test_loader
+        num_train_examples = len(trainset)
+    return trainset, train_loader, test_loader, num_train_examples

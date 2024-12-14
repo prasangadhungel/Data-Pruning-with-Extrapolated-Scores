@@ -10,12 +10,13 @@ models:
     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt"
 
 hyperparams:
-  k_values: [20]
+  k_values: [50]
   num_seeds: [1000]
   distance: "euclidean"
   lr: 0.01
   epochs: 10000
   gnn:
+    type: "gcn"  # Options: "gcn", "gat"
     hidden_layers: [512, 256, 128]
 
 wandb:

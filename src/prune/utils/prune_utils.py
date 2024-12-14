@@ -1,15 +1,18 @@
+import logging
 import time
 from types import SimpleNamespace
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from omegaconf import OmegaConf
-
-import wandb
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
+
+import wandb
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
 
 
 def calculate_uncertainty(history):
@@ -115,7 +118,6 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
         # Initialize the ConvNet model
         net = get_model(cfg.model.name, num_classes=cfg.dataset.num_classes).to(device)
         # Define the loss function and optimizer
-        criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(
             net.parameters(),
             lr=cfg.training.lr,
@@ -137,11 +139,11 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
                 inputs, labels, _ = data
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = net(inputs)
-                loss = criterion(outputs, labels)
+                loss = torch.nn.functional.cross_entropy(outputs, labels)
+                optimizer.zero_grad()
                 train_losses.append(loss)
                 loss.backward()
                 optimizer.step()
-                optimizer.zero_grad()
                 scheduler.step()
 
             test_acc = evaluate(net, test_loader, device)
@@ -149,8 +151,8 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
 
             wandb.log({"Loss": train_loss}, step=epoch)
             wandb.log({"Accuracy": test_acc}, step=epoch)
-            print(
-                f"Epoch {epoch + 1}, Train Loss: {train_loss}, Test Accuracy: {test_acc}"
+            logger.info(
+                f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Acc: {test_acc:.5f}"
             )
 
         end_time = time.time()
@@ -163,6 +165,8 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
             "Top-5 Accuracy": top5_accuracy,
             "Training Time": training_time,
         }
-        print(f"Final Accuracy: {accuracy}, Top-5 Accuracy: {top5_accuracy}")
+        logger.info(
+            f"Final Accuracy: {accuracy:.5f}, Top-5 Accuracy: {top5_accuracy:.5f}"
+        )
 
         wandb.finish()
