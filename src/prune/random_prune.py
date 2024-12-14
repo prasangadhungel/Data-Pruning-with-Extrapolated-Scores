@@ -31,9 +31,9 @@ def main(cfg_path: str):
             str_prune_percentage = str(int(prune_percentage * 100))
             if prune_percentage == 0:
                 logger.info("Unpruned Training")
-                wandb_name = "unpruned-transform1"
+                wandb_name = "unpruned-"
             else:
-                wandb_name = f"random-prune-{str_prune_percentage}-transform1"
+                wandb_name = f"random-prune-{str_prune_percentage}"
                 frac_to_keep = 1 - prune_percentage
                 num_samples_to_keep = int(frac_to_keep * num_samples)
                 indices_to_keep = random.sample(range(num_samples), num_samples_to_keep)
