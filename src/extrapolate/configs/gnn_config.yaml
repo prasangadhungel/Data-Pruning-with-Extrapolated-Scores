@@ -1,20 +1,48 @@
+# dataset:
+#   name: "SYNTHETIC_CIFAR100_1M"
+#   partial: true
+#   subset_idxs: ["train"]
+#   original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
+#   subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
+
+# models:
+#   names: ["resnet50"]
+#   resnet50:
+#     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt"
+
+# hyperparams:
+#   k_values: [10]
+#   num_seeds: [1000]
+#   distance: "euclidean"
+#   lr: 0.01
+#   epochs: 5000
+#   gnn:
+#     type: "gcn"  # Options: "gcn", "gat"
+#     hidden_layers: [512, 256, 128]
+
+# wandb:
+#   project: "GNN extrapolate"
+
+# output:
+#   results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation.csv"
+
 dataset:
-  name: "SYNTHETIC_CIFAR100_1M"
-  partial: true
-  subset_idxs: ["0"]
-  scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
+  name: "CIFAR10"
+  partial: false
+  subset_idxs: ["train"]
+  original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/CIFAR10_dynamic_uncertainty_0.json"
+  subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset_scores/CIFAR10_dynamic_uncertainty_0.json"
 
 models:
-  names: ["resnet50-self-trained"]
+  names: ["resnet50"]
   resnet50:
-    path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt"
+    path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/dynamic_uncertainty.pth"
 
 hyperparams:
-  k_values: [50]
-  num_seeds: [1000]
+  k_values: [10]
   distance: "euclidean"
   lr: 0.01
-  epochs: 10000
+  epochs: 5000
   gnn:
     type: "gcn"  # Options: "gcn", "gat"
     hidden_layers: [512, 256, 128]

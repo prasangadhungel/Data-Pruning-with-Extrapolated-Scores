@@ -37,7 +37,11 @@ dataset:
   name: "PLACES_365"
   num_classes: 365
   partial: false
+  image_size: 64
   subset: []
+  for_extrapolation:
+    value: true
+    subset_size: 450000
 
 model:
   name: "ResNet50"
@@ -52,10 +56,12 @@ uncertainty:
   window: 10
 
 pruning:
+  prune: false
   percentages: [0.1, 0.2, 0.5]
 
 logging:
   log_interval: 15000
 
 paths:
-  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"
+  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset_scores"
+  models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365"

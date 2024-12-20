@@ -1,11 +1,11 @@
 import json
-import logging
 import os
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from loguru import logger
 from omegaconf import OmegaConf
 from scipy.stats import spearmanr
 from sklearn.neighbors import NearestNeighbors
@@ -18,81 +18,27 @@ from prune.utils.argparse import parse_config
 from prune.utils.dataset import get_dataset
 from prune.utils.models import load_model_by_name
 
-logger = logging.getLogger(__name__)
+logger.add(
+    "/nfs/homedirs/dhp/unsupervised-data-pruning/logs/slurm/logfile-extrapolate.log",
+    format="{time:MM-DD HH:mm} - {message}",
+    rotation="10 MB",
+)
 
 
 class GNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_layers, output_dim):
+    def __init__(self, input_dim, output_dim):
         super(GNN, self).__init__()
-
-        self.convs = torch.nn.ModuleList()
-        self.convs.append(GCNConv(input_dim, hidden_layers[0]))
-
-        for i in range(len(hidden_layers) - 1):
-            self.convs.append(GCNConv(hidden_layers[i], hidden_layers[i + 1]))
-
-        self.convs.append(GCNConv(hidden_layers[-1], output_dim))
+        self.conv1 = GCNConv(input_dim, 512)
+        self.conv2 = GCNConv(512, 256)
+        self.conv3 = GCNConv(256, output_dim)
 
     def forward(self, x, edge_index, edge_attr):
-        for conv in self.convs[:-1]:
-            x = conv(x, edge_index, edge_attr)
-            x = F.relu(x)
-
-        x = self.convs[-1](x, edge_index, edge_attr)
+        x = self.conv1(x, edge_index, edge_attr)
+        x = F.relu(x)
+        x = self.conv2(x, edge_index, edge_attr)
+        x = F.relu(x)
+        x = self.conv3(x, edge_index, edge_attr)
         return x
-
-
-class GNNFactory:
-    @staticmethod
-    def create_gnn(gnn_type, input_dim, hidden_layers, output_dim):
-        if gnn_type == "gcn":
-            return GNN(input_dim, hidden_layers, output_dim)
-        elif gnn_type == "gat":
-            from torch_geometric.nn import GATConv
-
-            class GAT(torch.nn.Module):
-                def __init__(self, input_dim, hidden_layers, output_dim):
-                    super(GAT, self).__init__()
-                    self.convs = torch.nn.ModuleList()
-                    self.convs.append(GATConv(input_dim, hidden_layers[0]))
-                    for i in range(len(hidden_layers) - 1):
-                        self.convs.append(
-                            GATConv(hidden_layers[i], hidden_layers[i + 1])
-                        )
-                    self.convs.append(GATConv(hidden_layers[-1], output_dim))
-
-                def forward(self, x, edge_index, edge_attr):
-                    for conv in self.convs[:-1]:
-                        x = conv(x, edge_index)
-                        x = F.relu(x)
-                    x = self.convs[-1](x, edge_index)
-                    return x
-
-            return GAT(input_dim, hidden_layers, output_dim)
-        elif gnn_type == "sage":
-            from torch_geometric.nn import SAGEConv
-
-            class GraphSAGE(torch.nn.Module):
-                def __init__(self, input_dim, hidden_layers, output_dim):
-                    super(GraphSAGE, self).__init__()
-                    self.convs = torch.nn.ModuleList()
-                    self.convs.append(SAGEConv(input_dim, hidden_layers[0]))
-                    for i in range(len(hidden_layers) - 1):
-                        self.convs.append(
-                            SAGEConv(hidden_layers[i], hidden_layers[i + 1])
-                        )
-                    self.convs.append(SAGEConv(hidden_layers[-1], output_dim))
-
-                def forward(self, x, edge_index):
-                    for conv in self.convs[:-1]:
-                        x = conv(x, edge_index)
-                        x = F.relu(x)
-                    x = self.convs[-1](x, edge_index)
-                    return x
-
-            return GraphSAGE(input_dim, hidden_layers, output_dim)
-        else:
-            raise ValueError(f"Unknown GNN type: {gnn_type}")
 
 
 def get_edges_and_attributes(embeddings, k=10, distance="euclidean"):
@@ -111,7 +57,7 @@ def get_edges_and_attributes(embeddings, k=10, distance="euclidean"):
     edge_attr = []
 
     for i in range(neighbors.shape[0]):
-        for j in range(1, k + 1):
+        for j in range(1, k + 1):  # Skip the first neighbor (itself)
             edge_index.append([i, neighbors[i, j]])
             edge_attr.append(np.exp(-distances[i, j]))
 
@@ -125,6 +71,7 @@ def prepare_data(
     embeddings_dict, seed_samples, full_scores_dict, k, distance="euclidean"
 ):
     samples_list = [int(i) for i in embeddings_dict.keys()]
+
     seed_samples_pos = [samples_list.index(i) for i in seed_samples]
 
     embeddings = np.array(
@@ -135,6 +82,11 @@ def prepare_data(
 
     edge_index, edge_attr = get_edges_and_attributes(embeddings, k, distance)
     x = torch.tensor(embeddings, dtype=torch.float)
+
+    # Add the binary feature for seed nodes
+    # seed_feature = torch.zeros(x.size(0), 1, dtype=torch.float)
+    # seed_feature[seed_samples_pos] = 1.0
+    # x = torch.cat((x, seed_feature), dim=1)
 
     mask = torch.zeros(y.size(0), dtype=torch.bool)
     mask[seed_samples_pos] = True
@@ -152,8 +104,11 @@ def main(cfg_path: str):
         subset_idxs=cfg.dataset.subset_idxs,
     )
 
-    with open(cfg.dataset.scores_file) as f:
+    with open(cfg.dataset.original_scores_file) as f:
         full_scores_dict = json.load(f)
+
+    with open(cfg.dataset.subset_scores_file) as f:
+        subset_scores_dict = json.load(f)
 
     results = []
 
@@ -171,70 +126,135 @@ def main(cfg_path: str):
             embeddings_dict[sample_idx] = embedding_val.cpu()
 
         for k in tqdm(cfg.hyperparams.k_values):
-            for num_seed in tqdm(cfg.hyperparams.num_seeds):
-                wandb.init(
-                    project=cfg.wandb.project,
-                    name=f"k-{k}-num_seed-{num_seed}-model-{model_name}",
+            wandb.init(
+                project=cfg.wandb.project,
+                name=f"k-{k}-model-{model_name}",
+            )
+            wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
+            seed_samples = [int(key) for key in subset_scores_dict.keys()]
+            num_seed = len(seed_samples)
+            data = prepare_data(
+                embeddings_dict,
+                seed_samples,
+                full_scores_dict,
+                k,
+                cfg.hyperparams.distance,
+            ).to(device)
+
+            model = GNN(input_dim=data.num_node_features, output_dim=1).to(device)
+
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+            out = model(data.x, data.edge_index, data.edge_attr).squeeze()
+
+            orig_seed = (
+                data.y.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
+            )
+            pred_seed = (
+                out.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
+            )
+
+            corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
+            spearman_seed = spearmanr(orig_seed, pred_seed).correlation
+
+            logger.info(
+                f"For seeded samples, Corr: {corr_seed}, Spearman: {spearman_seed}"
+            )
+
+            orig_list = (
+                data.y.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
+            )
+            pred_list = (
+                out.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
+            )
+
+            corr_avg = np.corrcoef(orig_list, pred_list)[0, 1]
+            spearman_avg = spearmanr(orig_list, pred_list).correlation
+
+            logger.info(
+                f"For unseeded samples, Corr: {corr_avg}, Spearman: {spearman_avg}"
+            )
+
+            model.train()
+            for epoch in range(10000):  # Number of epochs
+                optimizer.zero_grad()
+                out = model(data.x, data.edge_index, data.edge_attr).squeeze()
+                loss = F.mse_loss(out[data.train_mask], data.y[data.train_mask])
+                loss.backward()
+                optimizer.step()
+                if epoch % 100 == 0:
+                    print(f"GNN Epoch: {epoch}, Loss: {loss.item()}")
+
+                wandb.log({"Train Loss": loss.item()}, step=epoch)
+
+                orig_seed = (
+                    data.y.cpu()
+                    .detach()
+                    .numpy()[data.train_mask.cpu().detach().numpy()]
                 )
-                wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
-                seed_samples = np.random.choice(
-                    list(embeddings_dict.keys()), num_seed, replace=False
-                )
-                data = prepare_data(
-                    embeddings_dict,
-                    seed_samples,
-                    full_scores_dict,
-                    k,
-                    cfg.hyperparams.distance,
-                ).to(device)
-
-                gnn_model = GNNFactory.create_gnn(
-                    cfg.hyperparams.gnn.type,
-                    input_dim=data.num_node_features,
-                    hidden_layers=cfg.hyperparams.gnn.hidden_layers,
-                    output_dim=1,
-                ).to(device)
-
-                optimizer = torch.optim.Adam(
-                    gnn_model.parameters(), lr=cfg.hyperparams.lr
+                pred_seed = (
+                    out.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
                 )
 
-                for epoch in range(cfg.hyperparams.epochs):
-                    gnn_model.train()
-                    optimizer.zero_grad()
-                    out = gnn_model(data.x, data.edge_index, data.edge_attr).squeeze()
-                    loss = F.mse_loss(out[data.train_mask], data.y[data.train_mask])
-                    loss.backward()
-                    optimizer.step()
+                corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
+                spearman_seed = spearmanr(orig_seed, pred_seed).correlation
 
-                    if epoch % 200 == 0:
-                        logger.info(f"GNN Epoch: {epoch}, Loss: {loss.item()}")
+                wandb.log({"Corr Seed": corr_seed}, step=epoch)
+                wandb.log({"Spearman Seed": spearman_seed}, step=epoch)
 
-                    wandb.log({"Train Loss": loss.item()}, step=epoch)
-
-                gnn_model.eval()
-                with torch.no_grad():
-                    out = gnn_model(data.x, data.edge_index, data.edge_attr).squeeze()
-
-                corr_avg = np.corrcoef(
-                    out[~data.train_mask].cpu().numpy(),
-                    data.y[~data.train_mask].cpu().numpy(),
-                )[0, 1]
-                spearman_avg = spearmanr(
-                    out[~data.train_mask].cpu().numpy(),
-                    data.y[~data.train_mask].cpu().numpy(),
-                ).correlation
-
-                results.append(
-                    {
-                        "model": model_name,
-                        "k": k,
-                        "num_seeds": num_seed,
-                        "corr_avg": corr_avg,
-                        "spearman_avg": spearman_avg,
-                    }
+                orig_list = (
+                    data.y.cpu()
+                    .detach()
+                    .numpy()[~data.train_mask.cpu().detach().numpy()]
                 )
-                wandb.finish()
+                pred_list = (
+                    out.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
+                )
+
+                corr_avg = np.corrcoef(orig_list, pred_list)[0, 1]
+                spearman_avg = spearmanr(orig_list, pred_list).correlation
+
+                wandb.log({"Corr Unseed": corr_avg}, step=epoch)
+                wandb.log({"Spearman Unseed": spearman_avg}, step=epoch)
+
+            model.eval()
+            with torch.no_grad():
+                out = model(data.x, data.edge_index, data.edge_attr).squeeze()
+
+            orig_list = (
+                data.y.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
+            )
+            pred_list = (
+                out.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
+            )
+
+            corr_avg = np.corrcoef(orig_list, pred_list)[0, 1]
+            spearman_avg = spearmanr(orig_list, pred_list).correlation
+
+            # check the correlation for the seed samples as well
+            orig_seed = (
+                data.y.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
+            )
+            pred_seed = (
+                out.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
+            )
+
+            corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
+            spearman_seed = spearmanr(orig_seed, pred_seed).correlation
+
+            logger.info(
+                f"For seeded samples, Corr: {corr_seed}, Spearman: {spearman_seed}"
+            )
+            results.append(
+                {
+                    "model": model_name,
+                    "k": k,
+                    "num_seeds": num_seed,
+                    "corr_avg": corr_avg,
+                    "spearman_avg": spearman_avg,
+                }
+            )
+            wandb.finish()
 
     results_df = pd.DataFrame(results)
     results_df.to_csv(cfg.output.results_file, index=False)

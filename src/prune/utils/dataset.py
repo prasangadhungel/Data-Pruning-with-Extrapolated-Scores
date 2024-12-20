@@ -203,6 +203,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
         testset = CIFAR10(
             root="./data", train=False, download=True, transform=transform_test
         )
+        trainset = IndexDataset(trainset)
 
     elif dataset_name == "CIFAR100":
         mean_cifar100 = (0.5071, 0.4865, 0.4409)
@@ -214,6 +215,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
         testset = CIFAR100(
             root="./data", train=False, download=True, transform=transform_test
         )
+        trainset = IndexDataset(trainset)
 
     elif dataset_name == "PLACES_365":
         mean_places365 = (0.485, 0.456, 0.406)
@@ -238,6 +240,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
             small=True,
             transform=transform_test,
         )
+        trainset = IndexDataset(trainset)
 
     elif dataset_name == "SYNTHETIC_CIFAR100_1M":
         mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
@@ -345,7 +348,6 @@ def prepare_data(dataset_cfg, batch_size):
 
     else:
         trainset, testset = get_dataset(dataset_cfg.name)
-        trainset = IndexDataset(trainset)
         train_loader, test_loader = get_dataloaders_from_dataset(
             trainset, testset, batch_size=batch_size
         )

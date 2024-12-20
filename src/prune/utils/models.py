@@ -3,7 +3,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-import torchvision
+from torchvision.models import ResNet18_Weights, ResNet50_Weights
+from torchvision.models import resnet18 as resnet_18
+from torchvision.models import resnet50 as resnet_50
 
 __all__ = ["ResNet", "resnet18", "resnet50"]
 
@@ -95,7 +97,7 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, num_classes=1000, image_size=224):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -107,10 +109,17 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         # for 224x224 input
-        # self.avgpool = nn.AvgPool2d(14)
+        if image_size == 224:
+            self.avgpool = nn.AvgPool2d(14)
 
-        # for 64x64 input
-        self.avgpool = nn.AvgPool2d(4)
+        elif image_size == 64:
+            self.avgpool = nn.AvgPool2d(4)
+
+        elif image_size == 32:
+            self.avgpool = nn.AvgPool2d(2)
+
+        else:
+            raise ValueError(f"Invalid image size: {image_size}")
 
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -185,11 +194,11 @@ def resnet50(pretrained=False, **kwargs):
     return model
 
 
-def get_model(model_name: str, num_classes: int):
+def get_model(model_name: str, num_classes: int, image_size: int = 224):
     if model_name == "ResNet18":
-        model = resnet18(num_classes=num_classes)
+        model = resnet18(num_classes=num_classes, image_size=image_size)
     elif model_name == "ResNet50":
-        model = resnet50(num_classes=num_classes)
+        model = resnet50(num_classes=num_classes, image_size=image_size)
     return model
 
 
@@ -226,9 +235,11 @@ def load_model_by_name(model_name, device, path=None):
         embedding_model = ResNetEmbedding(model).to(device)
 
     elif model_name == "resnet18":
-        embedding_model = torchvision.models.resnet18(pretrained=True).to(device)
+        weights = ResNet18_Weights.DEFAULT
+        embedding_model = resnet_18(weights=weights).to(device)
 
     elif model_name == "resnet50":
-        embedding_model = torchvision.models.resnet50(pretrained=True).to(device)
+        weights = ResNet50_Weights.DEFAULT
+        embedding_model = resnet_50(weights=weights).to(device)
 
     return embedding_model
