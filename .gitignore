@@ -118,6 +118,7 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
+*.log
 
 # Environments
 .env
@@ -166,11 +167,13 @@ cifar10_data/
 *_samples_*/
 src/*.json
 scores/
-
+savedir/
+commands.txt
 # logs
 logs/
 wandb/
 
 # scripts
 scripts/
-
+outputs/
+models/
