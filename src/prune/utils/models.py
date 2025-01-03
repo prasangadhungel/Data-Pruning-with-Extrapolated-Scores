@@ -223,15 +223,23 @@ class ResNetEmbedding(nn.Module):
         return x
 
 
-def load_model(model_name, num_classes, model_path, device):
-    model = get_model(model_name, num_classes)
+def load_model(model_name, num_classes, image_size, model_path, device):
+    model = get_model(model_name, num_classes, image_size)
     model.load_state_dict(torch.load(model_path, map_location=device))
     return model
 
 
-def load_model_by_name(model_name, device, path=None):
+def load_model_by_name(
+    model_name, num_classes=100, image_size=32, path=None, device="cuda"
+):
     if model_name == "resnet50-self-trained":
-        model = load_model("ResNet50", 100, path, device)
+        model = load_model(
+            "ResNet50",
+            num_classes=num_classes,
+            image_size=image_size,
+            model_path=path,
+            device=device,
+        )
         embedding_model = ResNetEmbedding(model).to(device)
 
     elif model_name == "resnet18":

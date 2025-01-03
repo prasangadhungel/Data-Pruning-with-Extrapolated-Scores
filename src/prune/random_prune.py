@@ -18,6 +18,8 @@ logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
 
 
 def main(cfg_path: str):
+    random.seed(42)
+    torch.manual_seed(42)
     cfg = OmegaConf.load(cfg_path)
     logger.info("Random Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

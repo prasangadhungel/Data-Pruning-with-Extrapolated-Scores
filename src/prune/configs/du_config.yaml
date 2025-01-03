@@ -30,6 +30,41 @@
 #   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"
 
 # for PLACES365 dataset
+# experiment:
+#   num_iterations: 1
+
+# dataset:
+#   name: "PLACES_365"
+#   num_classes: 365
+#   partial: false
+#   image_size: 64
+#   subset: []
+#   for_extrapolation:
+#     value: false
+#     subset_size: 450000
+
+# model:
+#   name: "ResNet50"
+
+# training:
+#   batch_size: 128
+#   num_epochs: 6
+#   lr: 0.001
+#   weight_decay: 0.001
+
+# uncertainty:
+#   window: 3
+
+# pruning:
+#   prune: false
+#   percentages: [0.1, 0.2, 0.5]
+
+# logging:
+#   log_interval: 15000
+
+# paths:
+#   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+#   # models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"
 experiment:
   num_iterations: 1
 
@@ -40,7 +75,7 @@ dataset:
   image_size: 64
   subset: []
   for_extrapolation:
-    value: true
+    value: false
     subset_size: 450000
 
 model:
@@ -63,5 +98,5 @@ logging:
   log_interval: 15000
 
 paths:
-  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset_scores"
-  models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365"
+  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+  models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"

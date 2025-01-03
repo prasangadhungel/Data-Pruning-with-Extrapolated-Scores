@@ -116,7 +116,11 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
         )
 
         # Initialize the ConvNet model
-        net = get_model(cfg.model.name, num_classes=cfg.dataset.num_classes).to(device)
+        net = get_model(
+            cfg.model.name,
+            num_classes=cfg.dataset.num_classes,
+            image_size=cfg.dataset.image_size,
+        ).to(device)
         # Define the loss function and optimizer
         optimizer = optim.Adam(
             net.parameters(),

@@ -74,8 +74,7 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
         )
 
     # save model
-    if cfg.paths.models:
-        torch.save(model.state_dict(), f"{cfg.paths.models}/dynamic_uncertainty.pth")
+    torch.save(model.state_dict(), f"{cfg.paths.models}/dynamic_uncertainty.pth")
     # Save dynamic uncertainty scores
 
     dynamic_uncertainty = {}
@@ -90,6 +89,9 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
 
 
 def main(cfg_path: str):
+    random.seed(42)
+    torch.manual_seed(42)
+
     cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
@@ -98,7 +100,6 @@ def main(cfg_path: str):
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     if cfg.dataset.for_extrapolation.value is True:
-        random.seed(42)
         indices_to_keep = random.sample(
             range(num_samples), cfg.dataset.for_extrapolation.subset_size
         )
