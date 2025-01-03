@@ -10,7 +10,7 @@ from omegaconf import OmegaConf
 from scipy.stats import spearmanr
 from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, knn_graph
 from tqdm import tqdm
 
 import wandb
@@ -41,56 +41,85 @@ class GNN(torch.nn.Module):
         return x
 
 
-def get_edges_and_attributes(embeddings, k=10, distance="euclidean"):
-    if distance == "euclidean":
-        nbrs = NearestNeighbors(n_neighbors=k + 1, algorithm="ball_tree").fit(
-            embeddings
-        )
-    elif distance == "cosine":
-        nbrs = NearestNeighbors(n_neighbors=k + 1, algorithm="ball_tree").fit(
-            embeddings
-        )
+def get_edges_and_attributes(
+    embeddings,
+    k=10,
+    distance="euclidean",
+    read_knn=False,
+    save_knn=True,
+    knn_file=None,
+    device=torch.device("cuda"),
+):
+    x = torch.tensor(embeddings, dtype=torch.float, device=device)
 
-    distances, neighbors = nbrs.kneighbors(embeddings)
+    if distance == "cosine":
+        x = F.normalize(x, p=2, dim=1)
 
-    edge_index = []
-    edge_attr = []
+    # knn_graph will return edge_index with shape [2, E]
+    if read_knn:
+        edge_index = torch.load(knn_file, map_location=device)
+        logger.info(f"Loaded edge_index from {knn_file}")
 
-    for i in range(neighbors.shape[0]):
-        for j in range(1, k + 1):  # Skip the first neighbor (itself)
-            edge_index.append([i, neighbors[i, j]])
-            edge_attr.append(np.exp(-distances[i, j]))
+    else:
+        logger.info("Computing kNN graph")
+        edge_index = knn_graph(x, k, loop=False)
+        logger.info("Finished computing kNN graph")
 
-    edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-    edge_attr = torch.tensor(edge_attr, dtype=torch.float)
+        if save_knn:
+            torch.save(edge_index, knn_file)
+            logger.info(f"Saved edge_index to {knn_file}")
 
+    # Compute distances for each edge:
+    src, dst = edge_index
+    logger.info(f"Computing edge attributes using {distance} distance")
+    dist = (x[src] - x[dst]).pow(2).sum(dim=-1).sqrt()
+
+    # If using cosine distance, dist now represents Euclidean distance between normalized vectors.
+    # For cosine, you might want to convert this back to something akin to an exponential weighting.
+    # By default, we do exp(-dist) as before.
+    edge_attr = torch.exp(-dist)
+
+    # Move back to CPU if needed, or stay on GPU if you prefer
+    edge_index = edge_index.to(device)
+    edge_attr = edge_attr.to(device)
+    logger.info("Finished computing edge attributes")
     return edge_index, edge_attr
 
 
 def prepare_data(
-    embeddings_dict, seed_samples, full_scores_dict, k, distance="euclidean"
+    embeddings_dict,
+    seed_samples,
+    full_scores_dict,
+    k,
+    read_knn=False,
+    save_knn=True,
+    knn_file=None,
+    distance="euclidean",
+    device="cuda",
 ):
     samples_list = [int(i) for i in embeddings_dict.keys()]
 
     seed_samples_pos = [samples_list.index(i) for i in seed_samples]
 
+    # Move embeddings to numpy first, then tensor
     embeddings = np.array(
         [embeddings_dict[i].cpu().numpy().flatten() for i in samples_list]
     )
     y = [full_scores_dict[str(i)] for i in samples_list]
     y = torch.tensor(y, dtype=torch.float)
 
-    edge_index, edge_attr = get_edges_and_attributes(embeddings, k, distance)
-    x = torch.tensor(embeddings, dtype=torch.float)
-
-    # Add the binary feature for seed nodes
-    # seed_feature = torch.zeros(x.size(0), 1, dtype=torch.float)
-    # seed_feature[seed_samples_pos] = 1.0
-    # x = torch.cat((x, seed_feature), dim=1)
+    # Compute edges and attrs using GPU
+    edge_index, edge_attr = get_edges_and_attributes(
+        embeddings, k, distance, read_knn, save_knn, knn_file, device=device
+    )
+    x = torch.tensor(embeddings, dtype=torch.float, device=device)
 
     mask = torch.zeros(y.size(0), dtype=torch.bool)
     mask[seed_samples_pos] = True
 
+    # Move label to device as well
+    y = y.to(device)
+    logger.info("Finished preparing data")
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, train_mask=mask)
 
 
@@ -114,16 +143,32 @@ def main(cfg_path: str):
 
     for model_name in tqdm(cfg.models.names):
         embedding_model = load_model_by_name(
-            model_name, device, cfg.models.resnet50.path
+            model_name,
+            cfg.dataset.num_classes,
+            cfg.dataset.image_size,
+            cfg.models.resnet50.path,
+            device,
         )
         embedding_model.eval()
-        embeddings_dict = {}
-        for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-            sample, _, sample_idx = trainset[i]
-            sample = sample.to(device).unsqueeze(0)
-            with torch.no_grad():
-                embedding_val = embedding_model(sample)
-            embeddings_dict[sample_idx] = embedding_val.cpu()
+
+        if cfg.checkpoints.read_embeddings:
+            embeddings_dict = torch.load(
+                cfg.checkpoints.embeddings_file, map_location=device
+            )
+            logger.info(f"Loaded embeddings from {cfg.checkpoints.embeddings_file}")
+
+        else:
+            embeddings_dict = {}
+            for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
+                sample, _, sample_idx = trainset[i]
+                sample = sample.to(device).unsqueeze(0)
+                with torch.no_grad():
+                    embedding_val = embedding_model(sample)
+                embeddings_dict[sample_idx] = embedding_val.cpu()
+
+            if cfg.checkpoints.save_embeddings:
+                torch.save(embeddings_dict, cfg.checkpoints.embeddings_file)
+                logger.info(f"Saved embeddings to {cfg.checkpoints.embeddings_file}")
 
         for k in tqdm(cfg.hyperparams.k_values):
             wandb.init(
@@ -133,125 +178,98 @@ def main(cfg_path: str):
             wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
             seed_samples = [int(key) for key in subset_scores_dict.keys()]
             num_seed = len(seed_samples)
+
             data = prepare_data(
                 embeddings_dict,
                 seed_samples,
                 full_scores_dict,
                 k,
-                cfg.hyperparams.distance,
+                read_knn=cfg.checkpoints.read_knn,
+                save_knn=cfg.checkpoints.save_knn,
+                knn_file=cfg.checkpoints.knn_file,
+                distance=cfg.hyperparams.distance,
+                device=device,
             ).to(device)
 
             model = GNN(input_dim=data.num_node_features, output_dim=1).to(device)
-
             optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-            out = model(data.x, data.edge_index, data.edge_attr).squeeze()
+            # Evaluate before training
+            model.eval()
+            with torch.no_grad():
+                out = model(data.x, data.edge_index, data.edge_attr).squeeze()
 
-            orig_seed = (
-                data.y.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
-            )
-            pred_seed = (
-                out.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
-            )
-
+            # Original (true) scores for seed nodes
+            orig_seed = data.y[data.train_mask].cpu().numpy()
+            pred_seed = out[data.train_mask].cpu().numpy()
             corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
             spearman_seed = spearmanr(orig_seed, pred_seed).correlation
-
             logger.info(
-                f"For seeded samples, Corr: {corr_seed}, Spearman: {spearman_seed}"
+                f"[Before Training] Seeds: Corr={corr_seed}, Spearman={spearman_seed}"
             )
 
-            orig_list = (
-                data.y.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
-            )
-            pred_list = (
-                out.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
-            )
-
-            corr_avg = np.corrcoef(orig_list, pred_list)[0, 1]
-            spearman_avg = spearmanr(orig_list, pred_list).correlation
-
+            # Original (true) scores for unseeded
+            orig_unseed = data.y[~data.train_mask].cpu().numpy()
+            pred_unseed = out[~data.train_mask].cpu().numpy()
+            corr_unseed = np.corrcoef(orig_unseed, pred_unseed)[0, 1]
+            spearman_unseed = spearmanr(orig_unseed, pred_unseed).correlation
             logger.info(
-                f"For unseeded samples, Corr: {corr_avg}, Spearman: {spearman_avg}"
+                f"[Before Training] Unseeded: Corr={corr_unseed}, Spearman={spearman_unseed}"
             )
 
+            # Training loop
             model.train()
-            for epoch in range(10000):  # Number of epochs
+            for epoch in range(10000):
                 optimizer.zero_grad()
                 out = model(data.x, data.edge_index, data.edge_attr).squeeze()
                 loss = F.mse_loss(out[data.train_mask], data.y[data.train_mask])
                 loss.backward()
                 optimizer.step()
+
                 if epoch % 100 == 0:
                     print(f"GNN Epoch: {epoch}, Loss: {loss.item()}")
 
                 wandb.log({"Train Loss": loss.item()}, step=epoch)
 
-                orig_seed = (
-                    data.y.cpu()
-                    .detach()
-                    .numpy()[data.train_mask.cpu().detach().numpy()]
-                )
-                pred_seed = (
-                    out.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
-                )
-
+                # Evaluate correlation metrics during training
+                pred_seed = out[data.train_mask].detach().cpu().numpy()
                 corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
                 spearman_seed = spearmanr(orig_seed, pred_seed).correlation
-
                 wandb.log({"Corr Seed": corr_seed}, step=epoch)
                 wandb.log({"Spearman Seed": spearman_seed}, step=epoch)
 
-                orig_list = (
-                    data.y.cpu()
-                    .detach()
-                    .numpy()[~data.train_mask.cpu().detach().numpy()]
-                )
-                pred_list = (
-                    out.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
-                )
+                pred_unseed = out[~data.train_mask].detach().cpu().numpy()
+                corr_unseed = np.corrcoef(orig_unseed, pred_unseed)[0, 1]
+                spearman_unseed = spearmanr(orig_unseed, pred_unseed).correlation
+                wandb.log({"Corr Unseed": corr_unseed}, step=epoch)
+                wandb.log({"Spearman Unseed": spearman_unseed}, step=epoch)
 
-                corr_avg = np.corrcoef(orig_list, pred_list)[0, 1]
-                spearman_avg = spearmanr(orig_list, pred_list).correlation
-
-                wandb.log({"Corr Unseed": corr_avg}, step=epoch)
-                wandb.log({"Spearman Unseed": spearman_avg}, step=epoch)
-
+            # Final evaluation
             model.eval()
             with torch.no_grad():
                 out = model(data.x, data.edge_index, data.edge_attr).squeeze()
 
-            orig_list = (
-                data.y.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
-            )
-            pred_list = (
-                out.cpu().detach().numpy()[~data.train_mask.cpu().detach().numpy()]
-            )
+            pred_unseed = out[~data.train_mask].detach().cpu().numpy()
+            corr_unseed = np.corrcoef(orig_unseed, pred_unseed)[0, 1]
+            spearman_unseed = spearmanr(orig_unseed, pred_unseed).correlation
 
-            corr_avg = np.corrcoef(orig_list, pred_list)[0, 1]
-            spearman_avg = spearmanr(orig_list, pred_list).correlation
-
-            # check the correlation for the seed samples as well
-            orig_seed = (
-                data.y.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
-            )
-            pred_seed = (
-                out.cpu().detach().numpy()[data.train_mask.cpu().detach().numpy()]
-            )
-
+            pred_seed = out[data.train_mask].detach().cpu().numpy()
             corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
             spearman_seed = spearmanr(orig_seed, pred_seed).correlation
 
             logger.info(
-                f"For seeded samples, Corr: {corr_seed}, Spearman: {spearman_seed}"
+                f"[After Training] Seeds: Corr={corr_seed}, Spearman={spearman_seed}"
+            )
+            logger.info(
+                f"[After Training] Unseeded: Corr={corr_unseed}, Spearman={spearman_unseed}"
             )
             results.append(
                 {
                     "model": model_name,
                     "k": k,
                     "num_seeds": num_seed,
-                    "corr_avg": corr_avg,
-                    "spearman_avg": spearman_avg,
+                    "corr_avg": corr_unseed,
+                    "spearman_avg": spearman_unseed,
                 }
             )
             wandb.finish()
