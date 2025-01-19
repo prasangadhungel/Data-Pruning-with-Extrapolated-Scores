@@ -183,36 +183,22 @@ def main(cfg_path: str):
     alpha = cfg.pprgo.alpha  # PPR teleport probability
     eps = cfg.pprgo.eps  # Stopping threshold for ACL's ApproximatePR
     topk = cfg.pprgo.topk  # Number of PPR neighbors for each node
-    ppr_normalization = (
-        cfg.pprgo.ppr_normalization
-    )  # Adjacency matrix normalization for weighting neighbors
-
+    ppr_normalization = cfg.pprgo.ppr_normalization
     hidden_size = cfg.pprgo.hidden_size  # Size of the MLP's hidden layer
     nlayers = cfg.pprgo.nlayers  # Number of MLP layers
     weight_decay = cfg.pprgo.weight_decay  # Weight decay used for training the MLP
     dropout = cfg.pprgo.dropout  # Dropout used for training
-
     lr = cfg.pprgo.lr  # Learning rate
-    max_epochs = (
-        cfg.pprgo.max_epochs
-    )  # Maximum number of epochs (exact number if no early stopping)
+    max_epochs = cfg.pprgo.max_epochs  # Maximum number of epochs
     batch_size = cfg.pprgo.batch_size  # Batch size for training
     batch_mult_val = cfg.pprgo.batch_mult_val  # Multiplier for validation batch size
-
-    eval_step = (
-        cfg.pprgo.eval_step
-    )  # Accuracy is evaluated after every this number of steps
+    eval_step = cfg.pprgo.eval_step
     run_val = cfg.pprgo.run_val  # Evaluate accuracy on validation set during training
-
     early_stop = cfg.pprgo.early_stop  # Use early stopping
     patience = cfg.pprgo.patience  # Patience for early stopping
-
-    nprop_inference = (
-        cfg.pprgo.nprop_inference
-    )  # Number of propagation steps during inference
-    inf_fraction = (
-        cfg.pprgo.inf_fraction
-    )  # Fraction of nodes for which local predictions are computed during inference
+    nprop_inference = cfg.pprgo.nprop_inference  # propagation steps during inference
+    inf_fraction = cfg.pprgo.inf_fraction
+    # Fraction of nodes for which local predictions are computed during inference
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -332,6 +318,7 @@ def main(cfg_path: str):
         early_stop=early_stop,
         patience=patience,
     )
+
     time_training = time.time() - start
     logger.info("Training done.")
     logger.info(f"Runtime: {time_training:.2f}s")

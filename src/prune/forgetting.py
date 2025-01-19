@@ -12,8 +12,7 @@ from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
-from utils.prune_utils import (get_correct, init_forget_stats, prune,
-                               update_forget_stats)
+from utils.prune_utils import get_correct, init_forget_stats, prune, update_forget_stats
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")

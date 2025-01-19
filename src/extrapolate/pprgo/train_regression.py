@@ -11,29 +11,24 @@ logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
 
 
 def run_batch(model, xbs, yb, optimizer, train):
-    # Set model to train/eval mode
     if train:
         model.train()
     else:
         model.eval()
 
-    # zero the parameter gradients
     if train:
         optimizer.zero_grad()
 
-    # forward
     with torch.set_grad_enabled(train):
         pred = model(*xbs)
         pred = pred.squeeze(-1)
 
-        # For regression, use MSE loss
         loss = F.mse_loss(pred, yb.float())
 
         if train:
             loss.backward()
             optimizer.step()
 
-    # Return the loss *value* (not a tensor) for easier logging/aggregation
     return loss.item()
 
 
@@ -69,7 +64,6 @@ def train(
     step = 0
     best_loss = np.inf
 
-    # Store history of losses
     loss_hist = {"train": [], "val": []}
     if ex is not None:
         ex.current_run.info["train"] = {"loss": []}
@@ -82,7 +76,6 @@ def train(
 
     for epoch in range(max_epochs):
         for xbs, yb in train_loader:
-            # Move to device
             xbs, yb = [xb.to(device) for xb in xbs], yb.to(device)
 
             # Run a single batch
@@ -93,13 +86,11 @@ def train(
 
             step += 1
             if step % eval_step == 0:
-                # Compute average train loss so far
                 train_loss = accumulated_loss / nsamples
                 loss_hist["train"].append(train_loss)
                 if ex is not None:
                     ex.current_run.info["train"]["loss"].append(train_loss)
 
-                # Evaluate on val set if provided
                 if val_set is not None:
                     sample_size = min(len(val_set), batch_mult_val * batch_size)
                     rnd_idx = np.random.choice(
@@ -147,11 +138,9 @@ def train(
                         f"Epoch {epoch}, step {step}: train_loss={train_loss:.5f}"
                     )
 
-        # Reset counters for next epoch
         accumulated_loss = 0.0
         nsamples = 0
 
-    # Load best state if using validation
     if val_set is not None and best_state is not None:
         model.load_state_dict(best_state)
 
