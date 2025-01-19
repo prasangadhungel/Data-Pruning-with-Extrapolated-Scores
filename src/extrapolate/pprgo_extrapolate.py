@@ -16,17 +16,16 @@ from tqdm import tqdm
 
 sys.path.append("/nfs/homedirs/dhp/unsupervised-data-pruning/src")
 
-import ast
 import logging
 import time
 
 import numpy as np
 import torch
-from pprgo.pprgo import ppr, utils
-from pprgo.pprgo.dataset import PPRDataset
-from pprgo.pprgo.pprgo_regression import PPRGo
-from pprgo.pprgo.predict_regression import predict
-from pprgo.pprgo.train_regression import train
+from pprgo import ppr, utils
+from pprgo.dataset import PPRDataset
+from pprgo.pprgo_regression import PPRGo
+from pprgo.predict_regression import predict
+from pprgo.train_regression import train
 
 from prune.utils.argparse import parse_config
 from prune.utils.dataset import get_dataset
@@ -109,6 +108,7 @@ def prepare_data_sparse(
     read_edge_attr=False,
     save_edge_attr=True,
     edge_attr_file=None,
+    run_val=False,
     val_fraction=0.1,
     distance="euclidean",
     device="cuda",
@@ -151,14 +151,25 @@ def prepare_data_sparse(
     N = len(samples_list)
     adj_matrix = sp.csr_matrix((w, (src, dst)), shape=(N, N))
 
-    num_seed = len(seed_samples_pos)
-    val_size = int(val_fraction * num_seed)
-    random.shuffle(seed_samples_pos)
-    val_idx = np.array(seed_samples_pos[:val_size], dtype=int)
-    train_idx = np.array(seed_samples_pos[val_size:], dtype=int)
+    if run_val:
+        num_seed = len(seed_samples_pos)
+        val_size = int(val_fraction * num_seed)
+        val_idx = np.random.choice(num_seed, val_size, replace=False)
+        # sort indices in val_idx
+        val_idx.sort()
+
+        train_idx = np.array(
+            [i for i in seed_samples_pos if i not in val_idx], dtype=int
+        )
+        train_idx.sort()
+
+    else:
+        train_idx = np.array(seed_samples_pos, dtype=int)
+        train_idx.sort()
+        val_idx = np.array([], dtype=int)
 
     seed_set = set(seed_samples_pos)
-    all_indices = set(range(N))
+    all_indices = set(samples_list)
     test_idx = np.array(list(all_indices - seed_set), dtype=int)
     test_idx.sort()
 
@@ -166,20 +177,8 @@ def prepare_data_sparse(
     return adj_matrix, attr_matrix, y.cpu().numpy(), train_idx, val_idx, test_idx
 
 
-def main():
-    cfg = OmegaConf.load(
-        "/nfs/homedirs/dhp/unsupervised-data-pruning/src/extrapolate/configs/pprgo_config.yaml"
-    )
-
-    # with open('/nfs/homedirs/dhp/unsupervised-data-pruning/src/extrapolate/pprgo/config_demo.yaml', 'r') as c:
-    #     config = yaml.safe_load(c)
-
-    # for key, val in config.items():
-    #     if type(val) is str:
-    #         try:
-    #             config[key] = ast.literal_eval(val)
-    #         except (ValueError, SyntaxError):
-    #             pass
+def main(cfg_path: str):
+    cfg = OmegaConf.load(cfg_path)
 
     alpha = cfg.pprgo.alpha  # PPR teleport probability
     eps = cfg.pprgo.eps  # Stopping threshold for ACL's ApproximatePR
@@ -215,9 +214,6 @@ def main():
         cfg.pprgo.inf_fraction
     )  # Fraction of nodes for which local predictions are computed during inference
 
-    cfg = OmegaConf.load(
-        "/nfs/homedirs/dhp/unsupervised-data-pruning/src/extrapolate/configs/gnn_config.yaml"
-    )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, _ = get_dataset(
@@ -283,6 +279,7 @@ def main():
         read_edge_attr=cfg.checkpoints.read_edge_attr,
         save_edge_attr=cfg.checkpoints.save_edge_attr,
         edge_attr_file=cfg.checkpoints.edge_attr_file,
+        run_val=run_val,
         val_fraction=0.1,
         distance=cfg.hyperparams.distance,
         device=device,
@@ -374,4 +371,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    default_config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "pprgo_config.yaml"
+    )
+    config_path = parse_config(
+        default_config=default_config_path, description="Run PPRGo Extrapolation"
+    )
+    main(cfg_path=config_path)
