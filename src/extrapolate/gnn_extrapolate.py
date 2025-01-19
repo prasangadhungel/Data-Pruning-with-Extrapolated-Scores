@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from loguru import logger
 from omegaconf import OmegaConf
 from scipy.stats import spearmanr
-from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv, knn_graph
 from tqdm import tqdm
@@ -48,6 +47,9 @@ def get_edges_and_attributes(
     read_knn=False,
     save_knn=True,
     knn_file=None,
+    read_edge_attr=False,
+    save_edge_attr=True,
+    edge_attr_file=None,
     device=torch.device("cuda"),
 ):
     x = torch.tensor(embeddings, dtype=torch.float, device=device)
@@ -71,15 +73,19 @@ def get_edges_and_attributes(
 
     # Compute distances for each edge:
     src, dst = edge_index
-    logger.info(f"Computing edge attributes using {distance} distance")
-    dist = (x[src] - x[dst]).pow(2).sum(dim=-1).sqrt()
 
-    # If using cosine distance, dist now represents Euclidean distance between normalized vectors.
-    # For cosine, you might want to convert this back to something akin to an exponential weighting.
-    # By default, we do exp(-dist) as before.
-    edge_attr = torch.exp(-dist)
+    if read_edge_attr:
+        edge_attr = torch.load(edge_attr_file, map_location=device)
+        logger.info(f"Loaded edge_attr from {edge_attr_file}")
 
-    # Move back to CPU if needed, or stay on GPU if you prefer
+    else:
+        logger.info(f"Computing edge attributes using {distance} distance")
+        dist = (x[src] - x[dst]).pow(2).sum(dim=-1).sqrt()
+        edge_attr = torch.exp(-dist)
+        if save_edge_attr:
+            torch.save(edge_attr, edge_attr_file)
+            logger.info(f"Saved edge_attr to {edge_attr_file}")
+
     edge_index = edge_index.to(device)
     edge_attr = edge_attr.to(device)
     logger.info("Finished computing edge attributes")
@@ -88,12 +94,17 @@ def get_edges_and_attributes(
 
 def prepare_data(
     embeddings_dict,
+    labels_dict,
+    num_classes,
     seed_samples,
     full_scores_dict,
     k,
     read_knn=False,
     save_knn=True,
     knn_file=None,
+    read_edge_attr=False,
+    save_edge_attr=True,
+    edge_attr_file=None,
     distance="euclidean",
     device="cuda",
 ):
@@ -105,14 +116,32 @@ def prepare_data(
     embeddings = np.array(
         [embeddings_dict[i].cpu().numpy().flatten() for i in samples_list]
     )
+
+    labels = [labels_dict[i] for i in samples_list]
+    one_hot_labels = np.eye(num_classes)[labels]
+
     y = [full_scores_dict[str(i)] for i in samples_list]
     y = torch.tensor(y, dtype=torch.float)
 
     # Compute edges and attrs using GPU
     edge_index, edge_attr = get_edges_and_attributes(
-        embeddings, k, distance, read_knn, save_knn, knn_file, device=device
+        embeddings,
+        k,
+        distance,
+        read_knn,
+        save_knn,
+        knn_file,
+        read_edge_attr,
+        save_edge_attr,
+        edge_attr_file,
+        device=device,
     )
-    x = torch.tensor(embeddings, dtype=torch.float, device=device)
+
+    # x = torch.tensor(embeddings, dtype=torch.float, device=device)
+    x = torch.tensor(one_hot_labels, dtype=torch.float, device=device)
+    x = torch.cat(
+        (x, torch.tensor(embeddings, dtype=torch.float, device=device)), dim=1
+    )
 
     mask = torch.zeros(y.size(0), dtype=torch.bool)
     mask[seed_samples_pos] = True
@@ -157,14 +186,21 @@ def main(cfg_path: str):
             )
             logger.info(f"Loaded embeddings from {cfg.checkpoints.embeddings_file}")
 
+            labels_dict = {}
+            for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
+                _, label, sample_idx = trainset[i]
+                labels_dict[sample_idx] = label
+
         else:
             embeddings_dict = {}
+            labels_dict = {}
             for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-                sample, _, sample_idx = trainset[i]
+                sample, label, sample_idx = trainset[i]
                 sample = sample.to(device).unsqueeze(0)
                 with torch.no_grad():
                     embedding_val = embedding_model(sample)
                 embeddings_dict[sample_idx] = embedding_val.cpu()
+                labels_dict[sample_idx] = label
 
             if cfg.checkpoints.save_embeddings:
                 torch.save(embeddings_dict, cfg.checkpoints.embeddings_file)
@@ -181,12 +217,17 @@ def main(cfg_path: str):
 
             data = prepare_data(
                 embeddings_dict,
+                labels_dict,
+                cfg.dataset.num_classes,
                 seed_samples,
                 full_scores_dict,
                 k,
                 read_knn=cfg.checkpoints.read_knn,
                 save_knn=cfg.checkpoints.save_knn,
                 knn_file=cfg.checkpoints.knn_file,
+                read_edge_attr=cfg.checkpoints.read_edge_attr,
+                save_edge_attr=cfg.checkpoints.save_edge_attr,
+                edge_attr_file=cfg.checkpoints.edge_attr_file,
                 distance=cfg.hyperparams.distance,
                 device=device,
             ).to(device)
@@ -219,7 +260,7 @@ def main(cfg_path: str):
 
             # Training loop
             model.train()
-            for epoch in range(10000):
+            for epoch in range(cfg.hyperparams.epochs):
                 optimizer.zero_grad()
                 out = model(data.x, data.edge_index, data.edge_attr).squeeze()
                 loss = F.mse_loss(out[data.train_mask], data.y[data.train_mask])

@@ -1,3 +1,36 @@
+# experiment:
+#   num_iterations: 1
+
+# dataset:
+#   name: "CIFAR10"
+#   num_classes: 10
+#   partial: false
+#   image_size: 32
+#   subset: []
+
+# model:
+#   name: "ResNet50"
+
+# training:
+#   batch_size: 128
+#   num_epochs: 50
+#   lr: 0.001
+#   weight_decay: 0.001
+
+# pruning:
+#   prune: true
+#   window: 10
+#   num_epochs: 16
+#   trajectory: 10
+#   decay: 0.9
+#   percentages: [0.5, 0.2, 0.1]
+
+# logging:
+#   log_interval: 15000
+
+# paths:
+#   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+
 experiment:
   num_iterations: 1
 
@@ -20,9 +53,10 @@ training:
 pruning:
   prune: true
   window: 10
+  num_epochs: 16
   trajectory: 10
   decay: 0.9
-  percentages: [0.1, 0.2, 0.5]
+  percentages: [0.2, 0.1]
 
 logging:
   log_interval: 15000

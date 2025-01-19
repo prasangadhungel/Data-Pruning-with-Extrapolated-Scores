@@ -30,7 +30,6 @@ def generate(probs, losses, indexes, cfg):
     moving_averages = []
     trajectory_len = cfg.pruning.trajectory
     decay = cfg.pruning.decay
-    mask_path = cfg.paths.mask
 
     while k < trajectory_len - window_size + 1:
         probs_window = probs[k : k + window_size, :]
@@ -79,7 +78,10 @@ def generate(probs, losses, indexes, cfg):
     moving_averages_sum_sort = np.sort(moving_averages_sum)
 
     # create a dict with data_mask as key and moving_averages_sum_sort as value
-    score_dict = dict(zip(data_mask, moving_averages_sum_sort))
+    score_dict = {
+        int(key): float(value)
+        for key, value in zip(data_mask, moving_averages_sum_sort)
+    }
     return score_dict
 
 
@@ -110,7 +112,7 @@ def main(cfg_path: str):
         model.cuda()
         criterion.cuda()
         output_epochs, loss_epochs, index_epochs = [], [], []
-        for epoch in range(cfg.training.num_epochs):
+        for epoch in range(cfg.pruning.num_epochs):
             train_losses = []
 
             for batch_idx, (data, target, sample_idx) in enumerate(train_loader):

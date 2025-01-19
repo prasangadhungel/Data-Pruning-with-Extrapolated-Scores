@@ -220,7 +220,7 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
     elif dataset_name == "PLACES_365":
         mean_places365 = (0.485, 0.456, 0.406)
         std_places365 = (0.229, 0.224, 0.225)
-        root_dir = "/nfs/homedirs/dhp/unsupervised-data-pruning/data/places-365"
+        root_dir = "/ceph/ssd/shared/datasets/places-365"
         transform_train, transform_test = get_transforms(
             mean_places365,
             std_places365,
