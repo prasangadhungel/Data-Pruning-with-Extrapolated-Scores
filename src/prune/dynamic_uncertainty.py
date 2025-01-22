@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import sys
 import time
 
 import torch
@@ -13,11 +14,8 @@ from utils.evaluate import evaluate
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty, prune
 
-logger.add(
-    "/nfs/homedirs/dhp/unsupervised-data-pruning/logs/slurm/logfile.log",
-    format="{time:MM-DD HH:mm} - {message}",
-    rotation="10 MB",
-)
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loader):

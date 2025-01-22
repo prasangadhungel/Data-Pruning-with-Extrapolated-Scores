@@ -1,10 +1,11 @@
-import logging
 import os
 import random
+import sys
 import time
 
 import torch
 import torch.optim as optim
+from loguru import logger
 from omegaconf import OmegaConf
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
@@ -13,8 +14,8 @@ from utils.models import get_model
 
 import wandb
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def main(cfg_path: str):

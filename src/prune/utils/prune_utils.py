@@ -1,18 +1,19 @@
-import logging
+import sys
 import time
 from types import SimpleNamespace
 
 import numpy as np
 import torch
 import torch.optim as optim
+from loguru import logger
 from omegaconf import OmegaConf
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
 
 import wandb
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M")
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def calculate_uncertainty(history):

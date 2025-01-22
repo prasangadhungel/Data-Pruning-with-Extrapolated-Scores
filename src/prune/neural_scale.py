@@ -1,16 +1,18 @@
 import json
-import logging
 import os
 import random
+import sys
 
 import torch
+from loguru import logger
 from omegaconf import OmegaConf
 from sklearn.cluster import KMeans
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.prune_utils import get_embeddings, prune
 
-logger = logging.getLogger(__name__)
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def main(cfg_path: str):

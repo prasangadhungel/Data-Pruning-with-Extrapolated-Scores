@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -17,11 +18,8 @@ from prune.utils.argparse import parse_config
 from prune.utils.dataset import get_dataset
 from prune.utils.models import load_model_by_name
 
-logger.add(
-    "/nfs/homedirs/dhp/unsupervised-data-pruning/logs/slurm/logfile-extrapolate.log",
-    format="{time:MM-DD HH:mm} - {message}",
-    rotation="10 MB",
-)
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 class GNN(torch.nn.Module):
@@ -168,18 +166,10 @@ def main(cfg_path: str):
     with open(cfg.dataset.subset_scores_file) as f:
         subset_scores_dict = json.load(f)
 
+    seed_samples = [int(key) for key in subset_scores_dict.keys()]
     results = []
 
     for model_name in tqdm(cfg.models.names):
-        embedding_model = load_model_by_name(
-            model_name,
-            cfg.dataset.num_classes,
-            cfg.dataset.image_size,
-            cfg.models.resnet50.path,
-            device,
-        )
-        embedding_model.eval()
-
         if cfg.checkpoints.read_embeddings:
             embeddings_dict = torch.load(
                 cfg.checkpoints.embeddings_file, map_location=device
@@ -192,6 +182,15 @@ def main(cfg_path: str):
                 labels_dict[sample_idx] = label
 
         else:
+            embedding_model = load_model_by_name(
+                model_name,
+                cfg.dataset.num_classes,
+                cfg.dataset.image_size,
+                cfg.models.resnet50.path,
+                device,
+            )
+            embedding_model.eval()
+
             embeddings_dict = {}
             labels_dict = {}
             for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
@@ -212,7 +211,6 @@ def main(cfg_path: str):
                 name=f"k-{k}-model-{model_name}",
             )
             wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
-            seed_samples = [int(key) for key in subset_scores_dict.keys()]
             num_seed = len(seed_samples)
 
             data = prepare_data(
@@ -276,14 +274,14 @@ def main(cfg_path: str):
                 pred_seed = out[data.train_mask].detach().cpu().numpy()
                 corr_seed = np.corrcoef(orig_seed, pred_seed)[0, 1]
                 spearman_seed = spearmanr(orig_seed, pred_seed).correlation
-                wandb.log({"Corr Seed": corr_seed}, step=epoch)
-                wandb.log({"Spearman Seed": spearman_seed}, step=epoch)
+                wandb.log({"Corr Seed": corr_seed * 0.5}, step=epoch)
+                wandb.log({"Spearman Seed": spearman_seed * 0.5}, step=epoch)
 
                 pred_unseed = out[~data.train_mask].detach().cpu().numpy()
                 corr_unseed = np.corrcoef(orig_unseed, pred_unseed)[0, 1]
                 spearman_unseed = spearmanr(orig_unseed, pred_unseed).correlation
-                wandb.log({"Corr Unseed": corr_unseed}, step=epoch)
-                wandb.log({"Spearman Unseed": spearman_unseed}, step=epoch)
+                wandb.log({"Corr Unseed": corr_unseed * 0.5}, step=epoch)
+                wandb.log({"Spearman Unseed": spearman_unseed * 0.5}, step=epoch)
 
             # Final evaluation
             model.eval()

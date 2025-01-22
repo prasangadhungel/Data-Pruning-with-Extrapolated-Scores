@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import sys
 
 import numpy as np
 import torch
@@ -16,11 +17,8 @@ from utils.evaluate import evaluate
 from utils.models import get_model
 from utils.prune_utils import prune
 
-logger.add(
-    "/nfs/homedirs/dhp/unsupervised-data-pruning/logs/slurm/logfile.log",
-    format="{time:MM-DD HH:mm} - {message}",
-    rotation="10 MB",
-)
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def generate(probs, losses, indexes, cfg):

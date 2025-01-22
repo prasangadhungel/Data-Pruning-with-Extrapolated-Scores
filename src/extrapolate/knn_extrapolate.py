@@ -1,152 +1,203 @@
 import json
-import logging
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 import torch
+from loguru import logger
 from omegaconf import OmegaConf
 from scipy.stats import spearmanr
+from torch_cluster.knn import knn
 from tqdm import tqdm
 
 from prune.utils.argparse import parse_config
 from prune.utils.dataset import get_dataset
 from prune.utils.models import load_model_by_name
 
-logger = logging.getLogger(__name__)
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def get_correlation(
-    embeddings_dict,
-    number_of_seeds,
-    k,
-    distance_metric,
-    full_scores_dict,
-    original_score,
+    embeddings_dict, seed_samples, k, full_scores_dict, distance_metric, device
 ):
-    samples_list = [int(i) for i in embeddings_dict.keys()]
-    seed_samples = samples_list
-    unseeded_samples = [i for i in samples_list if i not in seed_samples]
+    all_samples = [int(i) for i in embeddings_dict.keys()]
+    unseeded_samples = [s for s in all_samples if s not in seed_samples]
 
-    unseeded_scores_seed_avg = {}
-    unseeded_scores_seed_weighted = {}
+    unseed_embeddings = torch.stack(
+        [embeddings_dict[s].flatten() for s in unseeded_samples], dim=0
+    ).to(device)
 
-    for i in unseeded_samples:
-        distances = {}
-        for j in seed_samples:
-            if distance_metric == "cosine":
-                distance = torch.nn.functional.cosine_similarity(
-                    embeddings_dict[i], embeddings_dict[j], dim=1
-                )
-                # if cosine similarity is more distance should be less and vice versa
-                distance = 1 - distance
-                distances[j] = distance.item()
-            elif distance_metric == "euclidean":
-                distance = torch.dist(embeddings_dict[i], embeddings_dict[j], p=2)
-                distances[j] = distance.item()
+    seed_embeddings = torch.stack(
+        [embeddings_dict[s].flatten() for s in seed_samples], dim=0
+    ).to(device)
 
-        keys_smallest = np.array(list(distances.keys()))[
-            np.argsort(list(distances.values()))[:k]
-        ]
+    seed_scores = torch.tensor(
+        [full_scores_dict[str(s)] for s in seed_samples],
+        dtype=torch.float,
+        device=device,
+    )
+    unseed_scores = torch.tensor(
+        [full_scores_dict[str(u)] for u in unseeded_samples],
+        dtype=torch.float,
+        device=device,
+    )
 
-        neighbors_scores = [full_scores_dict[str(arg)] for arg in keys_smallest]
-        distance_neighbors = [distances[arg] + 1e-10 for arg in keys_smallest]
-        avg_score = np.mean(neighbors_scores)
-        weights = [np.exp(-d) for d in distance_neighbors]
-        weighted_avg_score = np.average(neighbors_scores, weights=weights)
-        unseeded_scores_seed_avg[i] = avg_score
-        unseeded_scores_seed_weighted[i] = weighted_avg_score
+    use_cosine = distance_metric == "cosine"
 
-    orig_list = [full_scores_dict[str(k)] for k in unseeded_samples]
-    avg_list = [unseeded_scores_seed_avg[k] for k in unseeded_samples]
-    weighted_list = [unseeded_scores_seed_weighted[k] for k in unseeded_samples]
-    true_scores = [original_score[str(k)] for k in unseeded_samples]
-    corr_avg = np.corrcoef(true_scores, avg_list)[0, 1]
-    corr_weighted = np.corrcoef(true_scores, weighted_list)[0, 1]
-    spearman_avg = spearmanr(orig_list, avg_list).correlation
-    spearman_weighted = spearmanr(orig_list, weighted_list).correlation
+    unseed_idx, seed_idx = knn(
+        x=seed_embeddings,  # source
+        y=unseed_embeddings,  # target
+        k=k,
+        cosine=use_cosine,
+    )
 
-    knn_dict = {}
-    for keys in full_scores_dict:
-        if int(keys) in seed_samples:
-            knn_dict[keys] = full_scores_dict[keys]
-        else:
-            knn_dict[keys] = unseeded_scores_seed_weighted[int(keys)]
+    neighbor_scores = seed_scores[seed_idx]  # shape: [k * U]
 
-    return corr_avg, corr_weighted, spearman_avg, spearman_weighted, knn_dict
+    U = len(unseeded_samples)
+    sum_unweighted = torch.zeros(U, dtype=torch.float, device=device)
+    sum_weighted = torch.zeros(U, dtype=torch.float, device=device)
+    sum_weights = torch.zeros(U, dtype=torch.float, device=device)
+
+    # diffs = seed_embeddings[seed_idx] - unseed_embeddings[unseed_idx]
+    # dists = diffs.norm(p=2, dim=1)  # shape: [k * U]
+    # weights = torch.exp(-dists)     # shape: [k * U]
+    # This will create CUDA OOM, so we need to compute in chunks
+
+    B = seed_idx.shape[0]
+    chunk_size = 10000
+
+    for i in tqdm(range(0, B, chunk_size), mininterval=20, maxinterval=40):
+        end = min(i + chunk_size, B)
+        si = seed_idx[i:end]
+        ui = unseed_idx[i:end]
+
+        diffs = seed_embeddings[si] - unseed_embeddings[ui]
+        chunk_dists = diffs.norm(p=2, dim=1)  # shape: [chunk_size]
+        chunk_weights = torch.exp(-chunk_dists)  # shape: [chunk_size]
+
+        chunk_scores = neighbor_scores[i:end]  # shape: [chunk_size]
+        sum_unweighted.index_add_(0, ui, chunk_scores)
+        sum_weighted.index_add_(0, ui, chunk_scores * chunk_weights)
+        sum_weights.index_add_(0, ui, chunk_weights)
+
+    knn_avg_scores = sum_unweighted / k
+    knn_weighted_scores = sum_weighted / sum_weights
+
+    unseed_scores_np = unseed_scores.cpu().numpy()
+    knn_avg_scores_np = knn_avg_scores.cpu().numpy()
+    knn_weighted_scores_np = knn_weighted_scores.cpu().numpy()
+
+    corr_avg = np.corrcoef(unseed_scores_np, knn_avg_scores_np)[0, 1]
+    corr_weighted = np.corrcoef(unseed_scores_np, knn_weighted_scores_np)[0, 1]
+
+    spearman_avg = spearmanr(unseed_scores_np, knn_avg_scores_np).correlation
+    spearman_weighted = spearmanr(unseed_scores_np, knn_weighted_scores_np).correlation
+
+    logger.info(f"Average Correlation: {corr_avg}, Spearman: {spearman_avg}")
+    logger.info(f"Weighted Correlation: {corr_weighted}, Spearman: {spearman_weighted}")
+
+    knn_dict_created = {}
+    for i, sample_id in enumerate(unseeded_samples):
+        knn_dict_created[str(sample_id)] = float(knn_weighted_scores_np[i])
+
+    for sample_id in seed_samples:
+        knn_dict_created[str(sample_id)] = float(full_scores_dict[str(sample_id)])
+
+    return corr_avg, corr_weighted, spearman_avg, spearman_weighted, knn_dict_created
 
 
 def main(cfg_path: str):
     cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trainset, _ = get_dataset(
-        cfg.dataset.name,
-        partial=cfg.dataset.partial,
-        subset_idxs=cfg.dataset.subset_idxs,
-    )
 
-    # Load full scores and original scores
-    with open(cfg.scores.full_scores_part1) as f:
-        full_scores_dict_1 = json.load(f)
-    with open(cfg.scores.full_scores_part2) as f:
-        full_scores_dict_2 = json.load(f)
-    full_scores_dict = {**full_scores_dict_1, **full_scores_dict_2}
+    with open(cfg.dataset.original_scores_file) as f:
+        full_scores_dict = json.load(f)
 
-    with open(cfg.scores.original_scores) as f:
-        original_score = json.load(f)
+    with open(cfg.dataset.subset_scores_file) as f:
+        subset_scores_dict = json.load(f)
+
+    seed_samples = [int(key) for key in subset_scores_dict.keys()]
+    results = []
 
     models, ks, num_seeds, distance_metrics = [], [], [], []
     corr_avgs, corr_weighteds, spearman_avgs, spearman_weighteds = [], [], [], []
 
     for model_name in tqdm(cfg.models.names):
-        embedding_model = load_model_by_name(model_name, device, cfg.models.model_path)
-        embedding_model.eval()
+        if cfg.checkpoints.read_embeddings:
+            logger.info("Reading embeddings")
+            embeddings_dict = torch.load(
+                cfg.checkpoints.embeddings_file, map_location=device
+            )
+            logger.info(f"Loaded embeddings from {cfg.checkpoints.embeddings_file}")
 
-        embeddings_dict = {}
-        for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-            sample = trainset[i][0]
-            sample_idx = trainset[i][2]
-            sample = sample.to(device).unsqueeze(0)
-            with torch.no_grad():
-                embedding_val = embedding_model(sample)
-            embeddings_dict[sample_idx] = embedding_val.cpu()
+        else:
+            logger.info("Computing embeddings")
 
-        for k in tqdm(cfg.knn.k_values):
-            for num_seed in tqdm(cfg.knn.num_seeds):
-                for distance_metric in tqdm(cfg.knn.distance_metrics):
+            trainset, _ = get_dataset(
+                cfg.dataset.name,
+                partial=cfg.dataset.partial,
+                subset_idxs=cfg.dataset.subset_idxs,
+            )
 
-                    (
-                        corr_avg,
-                        corr_weighted,
-                        spearman_avg,
-                        spearman_weighted,
-                        knn_dict,
-                    ) = get_correlation(
-                        embeddings_dict,
-                        num_seed,
-                        k,
-                        distance_metric,
-                        full_scores_dict,
-                        original_score,
-                    )
+            embedding_model = load_model_by_name(
+                model_name,
+                cfg.dataset.num_classes,
+                cfg.dataset.image_size,
+                cfg.models.resnet50.path,
+                device,
+            )
+            embedding_model.eval()
 
-                    models.append(model_name)
-                    ks.append(k)
-                    num_seeds.append(num_seed)
-                    distance_metrics.append(distance_metric)
-                    corr_avgs.append(corr_avg)
-                    corr_weighteds.append(corr_weighted)
-                    spearman_avgs.append(spearman_avg)
-                    spearman_weighteds.append(spearman_weighted)
-                    logger.info(
-                        f"k: {k}, num_seed: {num_seed}, distance_metric: {distance_metric}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}"
-                    )
+            embeddings_dict = {}
+            for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
+                sample, _, sample_idx = trainset[i]
+                sample = sample.to(device).unsqueeze(0)
+                with torch.no_grad():
+                    embedding_val = embedding_model(sample)
+                embeddings_dict[sample_idx] = embedding_val.cpu()
 
-                    with open(
-                        f"{cfg.output.knn_dict_path}_{model_name}_{k}_{num_seed}_{distance_metric}.json",
-                        "w",
-                    ) as f:
-                        json.dump(knn_dict, f)
+            if cfg.checkpoints.save_embeddings:
+                torch.save(embeddings_dict, cfg.checkpoints.embeddings_file)
+                logger.info(f"Saved embeddings to {cfg.checkpoints.embeddings_file}")
+
+        for k in tqdm(cfg.hyperparams.k_values):
+            distance = cfg.hyperparams.distance
+            (
+                corr_avg,
+                corr_weighted,
+                spearman_avg,
+                spearman_weighted,
+                knn_dict,
+            ) = get_correlation(
+                embeddings_dict,
+                seed_samples,
+                k,
+                full_scores_dict,
+                distance_metric=distance,
+                device=device,
+            )
+            num_seed = len(seed_samples)
+
+            models.append(model_name)
+            ks.append(k)
+            num_seeds.append(num_seed)
+
+            distance_metrics.append(distance)
+            corr_avgs.append(corr_avg)
+            corr_weighteds.append(corr_weighted)
+            spearman_avgs.append(spearman_avg)
+            spearman_weighteds.append(spearman_weighted)
+            logger.info(
+                f"k: {k}, num_seed: {num_seed}, distance_metric: {distance}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}",
+            )
+
+            with open(
+                f"{cfg.output.knn_dict_path}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_{distance}.json",
+                "w",
+            ) as f:
+                json.dump(knn_dict, f)
 
     results = pd.DataFrame(
         {

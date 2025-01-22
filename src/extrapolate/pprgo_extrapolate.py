@@ -2,12 +2,10 @@ import json
 import os
 import random
 import sys
-
 import numpy as np
 import scipy.sparse as sp
 import torch
 import torch.nn.functional as F
-from loguru import logger
 from omegaconf import OmegaConf
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -16,11 +14,11 @@ from tqdm import tqdm
 
 sys.path.append("/nfs/homedirs/dhp/unsupervised-data-pruning/src")
 
-import logging
 import time
 
 import numpy as np
 import torch
+from loguru import logger
 from pprgo import ppr, utils
 from pprgo.dataset import PPRDataset
 from pprgo.pprgo_regression import PPRGo
@@ -31,16 +29,8 @@ from prune.utils.argparse import parse_config
 from prune.utils.dataset import get_dataset
 from prune.utils.models import load_model_by_name
 
-# Set up logging
-logger = logging.getLogger()
-logger.handlers = []
-ch = logging.StreamHandler()
-formatter = logging.Formatter(
-    fmt="%(asctime)s (%(levelname)s): %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-logger.setLevel("INFO")
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def get_edges_and_attributes(
@@ -293,31 +283,193 @@ def main(cfg_path: str):
     else:
         val_set = None
     time_preprocessing = time.time() - start
-    logger.info(f"Runtime: {time_preprocessing:.2f}s")
     try:
         d = attr_matrix.n_columns
     except AttributeError:
         d = attr_matrix.shape[1]
-    time_loading = time.time() - start
-    logger.info(f"Runtime: {time_loading:.2f}s")
+
     start = time.time()
     model = PPRGo(d, hidden_size, nlayers, dropout)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
 
-    _, _ = train(
-        model=model,
-        train_set=train_set,
-        val_set=val_set,
-        lr=lr,
-        weight_decay=weight_decay,
-        max_epochs=max_epochs,
-        batch_size=batch_size,
-        batch_mult_val=batch_mult_val,
-        eval_step=eval_step,
-        early_stop=early_stop,
-        patience=patience,
+    ###################################################################################
+    train_loader = torch.utils.data.DataLoader(
+        dataset=train_set,
+        sampler=torch.utils.data.BatchSampler(
+            torch.utils.data.SequentialSampler(train_set),
+            batch_size=batch_size,
+            drop_last=False,
+        ),
+        batch_size=None,
+        num_workers=0,
     )
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    step = 0
+    best_loss = np.inf
+
+    loss_hist = {"train": [], "val": []}
+
+    accumulated_loss = 0.0
+    nsamples = 0
+    best_state = None
+    best_epoch = 0
+
+    predictions, _, _ = predict(
+        model=model,
+        adj_matrix=adj_matrix,
+        attr_matrix=attr_matrix,
+        alpha=alpha,
+        nprop=nprop_inference,
+        inf_fraction=inf_fraction,
+        ppr_normalization=ppr_normalization,
+    )
+
+    true_train = y[train_idx]
+    pred_train = predictions[train_idx]
+    corr_train = np.corrcoef(true_train, pred_train)[0, 1]
+    spearman_train = spearmanr(true_train, pred_train).correlation
+    logger.info(
+        f"[Before Training] Train-Corr={corr_train}, Train-Spearman={spearman_train}"
+    )
+
+    if run_val:
+        true_val = y[val_idx]
+        pred_val = predictions[val_idx]
+        corr_val = np.corrcoef(true_val, pred_val)[0, 1]
+        spearman_val = spearmanr(true_val, pred_val).correlation
+        logger.info(
+            f"[Before Training] Val-Corr={corr_val}, Val-Spearman={spearman_val}"
+        )
+
+    true_test = y[test_idx]
+    pred_test = predictions[test_idx]
+    corr_test = np.corrcoef(true_test, pred_test)[0, 1]
+    spearman_test = spearmanr(true_test, pred_test).correlation
+    logger.info(
+        f"[Before Training] Test-Corr={corr_test}, Test-Spearman={spearman_test}"
+    )
+
+    for epoch in range(max_epochs):
+        for xbs, yb in train_loader:
+            xbs, yb = [xb.to(device) for xb in xbs], yb.to(device)
+
+            model.train()
+            optimizer.zero_grad()
+            with torch.set_grad_enabled(True):
+                pred = model(*xbs)
+                pred = pred.squeeze(-1)
+                loss = F.mse_loss(pred, yb.float())
+                loss.backward()
+                optimizer.step()
+
+            loss_value = loss.item()
+
+            batch_size_current = yb.shape[0]
+            accumulated_loss += loss_value * batch_size_current
+            nsamples += batch_size_current
+
+            step += 1
+            if step % eval_step == 0:
+                predictions, _, _ = predict(
+                    model=model,
+                    adj_matrix=adj_matrix,
+                    attr_matrix=attr_matrix,
+                    alpha=alpha,
+                    nprop=nprop_inference,
+                    inf_fraction=inf_fraction,
+                    ppr_normalization=ppr_normalization,
+                )
+                mse_train = mean_squared_error(y[train_idx], predictions[train_idx])
+                mse_test = mean_squared_error(y[test_idx], predictions[test_idx])
+                mae_train = mean_absolute_error(y[train_idx], predictions[train_idx])
+                mae_test = mean_absolute_error(y[test_idx], predictions[test_idx])
+
+                if run_val:
+                    mse_val = mean_squared_error(y[val_idx], predictions[val_idx])
+                    mae_val = mean_absolute_error(y[val_idx], predictions[val_idx])
+
+                    logger.info(
+                        f"Train MSE: {mse_train:.4f}, Val MSE: {mse_val:.4f}, Test MSE: {mse_test:.4f}"
+                    )
+                    logger.info(
+                        f"Train MAE: {mae_train:.4f}, Val MAE: {mae_val:.4f}, Test MAE: {mae_test:.4f}"
+                    )
+
+                else:
+                    logger.info(f"Train MSE: {mse_train:.4f}, Test MSE: {mse_test:.4f}")
+                    logger.info(f"Train MAE: {mae_train:.4f}, Test MAE: {mae_test:.4f}")
+
+                true_train = y[train_idx]
+                pred_train = predictions[train_idx]
+                corr_train = np.corrcoef(true_train, pred_train)[0, 1]
+                spearman_train = spearmanr(true_train, pred_train).correlation
+                logger.info(f"Train-Corr={corr_train}, Train-Spearman={spearman_train}")
+
+                if run_val:
+                    true_val = y[val_idx]
+                    pred_val = predictions[val_idx]
+                    corr_val = np.corrcoef(true_val, pred_val)[0, 1]
+                    spearman_val = spearmanr(true_val, pred_val).correlation
+                    logger.info(f"Val-Corr={corr_val}, Val-Spearman={spearman_val}")
+
+                true_test = y[test_idx]
+                pred_test = predictions[test_idx]
+                corr_test = np.corrcoef(true_test, pred_test)[0, 1]
+                spearman_test = spearmanr(true_test, pred_test).correlation
+                logger.info(f"Test-Corr={corr_test}, Test-Spearman={spearman_test}")
+
+                train_loss = accumulated_loss / nsamples
+                loss_hist["train"].append(train_loss)
+
+                if val_set is not None:
+                    sample_size = min(len(val_set), batch_mult_val * batch_size)
+                    rnd_idx = np.random.choice(
+                        len(val_set), size=sample_size, replace=False
+                    )
+
+                    xbs_val, yb_val = val_set[rnd_idx]
+                    xbs_val, yb_val = [xb.to(device) for xb in xbs_val], yb_val.to(
+                        device
+                    )
+
+                    # Evaluate in eval mode (no gradient)
+                    model.eval()
+                    with torch.no_grad():
+                        val_pred = model(*xbs_val)
+                        val_pred = val_pred.squeeze(-1)
+
+                        val_loss = F.mse_loss(val_pred, yb_val.float()).item()
+                    loss_hist["val"].append(val_loss)
+
+                    logging.info(
+                        f"Subsidiary: Epoch {epoch}, step {step}: "
+                        f"train_loss={train_loss:.5f}, val_loss={val_loss:.5f}\n"
+                    )
+
+                    # Check if this is the best so far
+                    if val_loss < best_loss:
+                        best_loss = val_loss
+                        best_epoch = epoch
+                        best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+
+                    # Early stopping
+                    elif early_stop and epoch >= best_epoch + patience:
+                        logging.info(
+                            f"Early stopping at epoch {epoch}, best epoch was {best_epoch}"
+                        )
+                        model.load_state_dict(best_state)
+                        return epoch + 1, loss_hist
+
+                else:
+                    logging.info(
+                        f"Subsidiary: Epoch {epoch}, step {step}: train_loss={train_loss:.5f}\n"
+                    )
+
+        accumulated_loss = 0.0
+        nsamples = 0
 
     time_training = time.time() - start
     logger.info("Training done.")
@@ -334,19 +486,57 @@ def main(cfg_path: str):
     )
     time_inference = time.time() - start
     logger.info(f"Runtime: {time_inference:.2f}s")
+
     mse_train = mean_squared_error(y[train_idx], predictions[train_idx])
-    mse_val = mean_squared_error(y[val_idx], predictions[val_idx])
     mse_test = mean_squared_error(y[test_idx], predictions[test_idx])
     mae_train = mean_absolute_error(y[train_idx], predictions[train_idx])
-    mae_val = mean_absolute_error(y[val_idx], predictions[val_idx])
     mae_test = mean_absolute_error(y[test_idx], predictions[test_idx])
 
+    if run_val:
+        mse_val = mean_squared_error(y[val_idx], predictions[val_idx])
+        mae_val = mean_absolute_error(y[val_idx], predictions[val_idx])
+
+        logger.info(
+            f"Train MSE: {mse_train:.4f}, Val MSE: {mse_val:.4f}, Test MSE: {mse_test:.4f}"
+        )
+        logger.info(
+            f"Train MAE: {mae_train:.4f}, Val MAE: {mae_val:.4f}, Test MAE: {mae_test:.4f}"
+        )
+
+    else:
+        logger.info(f"Train MSE: {mse_train:.4f}, Test MSE: {mse_test:.4f}")
+        logger.info(f"Train MAE: {mae_train:.4f}, Test MAE: {mae_test:.4f}")
+
+    true_train = y[train_idx]
+    pred_train = predictions[train_idx]
+    corr_train = np.corrcoef(true_train, pred_train)[0, 1]
+    spearman_train = spearmanr(true_train, pred_train).correlation
     logger.info(
-        f"Train MSE: {mse_train:.4f}, Val MSE: {mse_val:.4f}, Test MSE: {mse_test:.4f}"
+        f"[After Training] Train-Corr={corr_train}, Train-Spearman={spearman_train}"
     )
+
+    if run_val:
+        true_val = y[val_idx]
+        pred_val = predictions[val_idx]
+        corr_val = np.corrcoef(true_val, pred_val)[0, 1]
+        spearman_val = spearmanr(true_val, pred_val).correlation
+        logger.info(
+            f"[After Training] Val-Corr={corr_val}, Val-Spearman={spearman_val}"
+        )
+
+    true_test = y[test_idx]
+    pred_test = predictions[test_idx]
+    corr_test = np.corrcoef(true_test, pred_test)[0, 1]
+    spearman_test = spearmanr(true_test, pred_test).correlation
     logger.info(
-        f"Train MAE: {mae_train:.4f}, Val MAE: {mae_val:.4f}, Test MAE: {mae_test:.4f}"
+        f"[After Training] Test-Corr={corr_test}, Test-Spearman={spearman_test}"
     )
+
+    logger.info("Train preds: ", pred_train[:20])
+    logger.info("Train true: ", true_train[:20])
+
+    logger.info("Test preds: ", pred_test[:20])
+    logger.info("Test true: ", true_test[:20])
 
     gpu_memory = torch.cuda.max_memory_allocated()
     memory = utils.get_max_memory_bytes()
