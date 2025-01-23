@@ -20,9 +20,11 @@ logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def get_correlation(
-    embeddings_dict, seed_samples, k, full_scores_dict, distance_metric, device
+    embeddings_dict, subset_scores_dict, k, full_scores_dict, distance_metric, device
 ):
     all_samples = [int(i) for i in embeddings_dict.keys()]
+    seed_samples = [int(key) for key in subset_scores_dict.keys()]
+
     unseeded_samples = [s for s in all_samples if s not in seed_samples]
 
     unseed_embeddings = torch.stack(
@@ -33,12 +35,13 @@ def get_correlation(
         [embeddings_dict[s].flatten() for s in seed_samples], dim=0
     ).to(device)
 
-    seed_scores = torch.tensor(
-        [full_scores_dict[str(s)] for s in seed_samples],
+    seed_scores_we_have = torch.tensor(
+        [subset_scores_dict[str(s)] for s in seed_samples],
         dtype=torch.float,
         device=device,
     )
-    unseed_scores = torch.tensor(
+
+    unseed_scores_true = torch.tensor(
         [full_scores_dict[str(u)] for u in unseeded_samples],
         dtype=torch.float,
         device=device,
@@ -53,7 +56,7 @@ def get_correlation(
         cosine=use_cosine,
     )
 
-    neighbor_scores = seed_scores[seed_idx]  # shape: [k * U]
+    neighbor_scores = seed_scores_we_have[seed_idx]  # shape: [k * U]
 
     U = len(unseeded_samples)
     sum_unweighted = torch.zeros(U, dtype=torch.float, device=device)
@@ -68,7 +71,7 @@ def get_correlation(
     B = seed_idx.shape[0]
     chunk_size = 10000
 
-    for i in tqdm(range(0, B, chunk_size), mininterval=20, maxinterval=40):
+    for i in range(0, B, chunk_size):
         end = min(i + chunk_size, B)
         si = seed_idx[i:end]
         ui = unseed_idx[i:end]
@@ -85,7 +88,7 @@ def get_correlation(
     knn_avg_scores = sum_unweighted / k
     knn_weighted_scores = sum_weighted / sum_weights
 
-    unseed_scores_np = unseed_scores.cpu().numpy()
+    unseed_scores_np = unseed_scores_true.cpu().numpy()
     knn_avg_scores_np = knn_avg_scores.cpu().numpy()
     knn_weighted_scores_np = knn_weighted_scores.cpu().numpy()
 
@@ -118,7 +121,6 @@ def main(cfg_path: str):
     with open(cfg.dataset.subset_scores_file) as f:
         subset_scores_dict = json.load(f)
 
-    seed_samples = [int(key) for key in subset_scores_dict.keys()]
     results = []
 
     models, ks, num_seeds, distance_metrics = [], [], [], []
@@ -172,13 +174,13 @@ def main(cfg_path: str):
                 knn_dict,
             ) = get_correlation(
                 embeddings_dict,
-                seed_samples,
+                subset_scores_dict,
                 k,
                 full_scores_dict,
                 distance_metric=distance,
                 device=device,
             )
-            num_seed = len(seed_samples)
+            num_seed = len(subset_scores_dict)
 
             models.append(model_name)
             ks.append(k)

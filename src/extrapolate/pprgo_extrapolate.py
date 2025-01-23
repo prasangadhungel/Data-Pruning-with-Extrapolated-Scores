@@ -2,6 +2,7 @@ import json
 import os
 import random
 import sys
+
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -444,7 +445,7 @@ def main(cfg_path: str):
                         val_loss = F.mse_loss(val_pred, yb_val.float()).item()
                     loss_hist["val"].append(val_loss)
 
-                    logging.info(
+                    logger.info(
                         f"Subsidiary: Epoch {epoch}, step {step}: "
                         f"train_loss={train_loss:.5f}, val_loss={val_loss:.5f}\n"
                     )
@@ -457,14 +458,14 @@ def main(cfg_path: str):
 
                     # Early stopping
                     elif early_stop and epoch >= best_epoch + patience:
-                        logging.info(
+                        logger.info(
                             f"Early stopping at epoch {epoch}, best epoch was {best_epoch}"
                         )
                         model.load_state_dict(best_state)
                         return epoch + 1, loss_hist
 
                 else:
-                    logging.info(
+                    logger.info(
                         f"Subsidiary: Epoch {epoch}, step {step}: train_loss={train_loss:.5f}\n"
                     )
 
