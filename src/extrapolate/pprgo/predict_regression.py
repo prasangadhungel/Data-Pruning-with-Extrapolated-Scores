@@ -1,9 +1,14 @@
+import sys
 import time
 
 import numpy as np
 import torch
+from loguru import logger
 
 from .pytorch_utils import matrix_to_torch
+
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def get_local_scores(model, attr_matrix, batch_size=10000):
@@ -37,6 +42,7 @@ def predict(
 
     start = time.time()
     if inf_fraction < 1.0:
+        logger.info(f"inf_fraction < 1.0 is chosen: {inf_fraction}")
         idx_sub = np.random.choice(
             adj_matrix.shape[0], int(inf_fraction * adj_matrix.shape[0]), replace=False
         )
@@ -50,12 +56,16 @@ def predict(
         )
         local_scores[idx_sub] = scores_sub
     else:
+        logger.info(f"inf_fraction >= 1.0 is chosen: {inf_fraction}")
         local_scores = get_local_scores(model.mlp, attr_matrix, batch_size_scores)
 
     time_local = time.time() - start
 
     start = time.time()
     scores = local_scores.copy()
+    logger.info(f"Local scores type: {type(local_scores)}")
+    logger.info(f"Local scores shape: {local_scores.shape}")
+    logger.info(f"First 10 local scores: {local_scores[:10]}")
 
     if ppr_normalization == "sym":
         deg = adj_matrix.sum(1).A1

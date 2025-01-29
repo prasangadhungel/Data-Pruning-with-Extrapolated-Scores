@@ -1,111 +1,16 @@
-# dataset:
-#   name: "SYNTHETIC_CIFAR100_1M"
-#   partial: true
-#   subset_idxs: ["train"]
-#   original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
-#   subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_train_2.json"
-
-# models:
-#   names: ["resnet50"]
-#   resnet50:
-#     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_ResNet50.pt"
-
-# hyperparams:
-#   k_values: [10]
-#   num_seeds: [1000]
-#   distance: "euclidean"
-#   lr: 0.01
-#   epochs: 5000
-#   gnn:
-#     type: "gcn"  # Options: "gcn", "gat"
-#     hidden_layers: [512, 256, 128]
-
-# wandb:
-#   project: "GNN extrapolate"
-
-# output:
-#   results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation.csv"
-
-# dataset:
-#   name: "CIFAR10"
-#   num_classes: 10
-#   image_size: 32
-#   partial: false
-#   subset_idxs: ["train"]
-#   original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
-#   subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
-  
-# models:
-#   names: ["resnet50-self-trained"]
-#   resnet50:
-#     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset/dynamic_uncertainty.pth"
-
-# hyperparams:
-#   k_values: [10]
-#   distance: "euclidean"
-#   lr: 0.01
-#   epochs: 10000
-#   gnn:
-#     type: "gcn"  # Options: "gcn", "gat"
-#     hidden_layers: [512, 256, 128]
-
-# wandb:
-#   project: "GNN extrapolate"
-
-# output:
-#   extrapolated_scores_dir: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated"
-#   results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_cifar10.csv"
-
-# checkpoints:
-#   read_embeddings: true
-#   save_embeddings: false
-#   embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/CIFAR10/embeddings_dict.pth"
-#   read_knn: true
-#   save_knn: false
-#   knn_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/CIFAR10/knn.pth"
-#   read_edge_attr: true
-#   save_edge_attr: false
-#   edge_attr_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/CIFAR10/edge_attr.pth"
-
-# pprgo:
-#   alpha: 0.5                  # PPR teleport probability
-#   eps: 1e-4                   # Stopping threshold for ACL's ApproximatePR
-#   topk: 32                    # Number of PPR neighbors for each node
-#   ppr_normalization: 'sym'    # Adjacency matrix normalization for weighting neighbors
-
-#   hidden_size: 512            # Size of the MLP's hidden layer
-#   nlayers: 4                  # Number of MLP layers
-#   weight_decay: 1e-4          # Weight decay used for training the MLP
-#   dropout: 0.1                # Dropout used for training
-
-#   lr: 5e-3                    # Learning rate
-#   max_epochs: 100             # Maximum number of epochs (exact number if no early stopping)
-#   batch_size: 512             # Batch size for training
-#   batch_mult_val: 4           # Multiplier for validation batch size
-
-#   eval_step: 1               # Accuracy is evaluated after every this number of steps
-#   run_val: False              # Evaluate accuracy on validation set during training
-
-#   early_stop: False           # Use early stopping
-#   patience: 50                # Patience for early stopping
-
-#   nprop_inference: 4          # Number of propagation steps during inference
-#   inf_fraction: 1.0           # Fraction of nodes for which local predictions are computed during inference
-
-
 dataset:
-  name: "PLACES_365"
-  num_classes: 365
-  image_size: 64
+  name: "CIFAR10"
+  num_classes: 10
+  image_size: 32
   partial: false
   subset_idxs: ["train"]
-  original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/PLACES_365_dynamic_uncertainty_0.json"
-  subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/PLACES_365_dynamic_uncertainty_0.json"
+  original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
+  subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
   
 models:
   names: ["resnet50-self-trained"]
   resnet50:
-    path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/dynamic_uncertainty.pth"
+    path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset/dynamic_uncertainty.pth"
 
 hyperparams:
   k_values: [10]
@@ -125,14 +30,14 @@ output:
 
 checkpoints:
   read_embeddings: true
-  save_embeddings: true
-  embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/places365/embeddings_dict.pth"
+  save_embeddings: false
+  embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/CIFAR10/embeddings_dict.pth"
   read_knn: true
-  save_knn: true
-  knn_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/places365/knn.pth"
+  save_knn: false
+  knn_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/CIFAR10/knn.pth"
   read_edge_attr: true
-  save_edge_attr: true
-  edge_attr_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/places365/edge_attr.pth"
+  save_edge_attr: false
+  edge_attr_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/CIFAR10/edge_attr.pth"
 
 pprgo:
   alpha: 0.5                  # PPR teleport probability
@@ -140,13 +45,13 @@ pprgo:
   topk: 32                    # Number of PPR neighbors for each node
   ppr_normalization: 'sym'    # Adjacency matrix normalization for weighting neighbors
 
-  hidden_size: 512            # Size of the MLP's hidden layer
-  nlayers: 3                  # Number of MLP layers
+  hidden_size: 256            # Size of the MLP's hidden layer
+  nlayers: 2                  # Number of MLP layers
   weight_decay: 1e-4          # Weight decay used for training the MLP
   dropout: 0.1                # Dropout used for training
 
   lr: 5e-3                    # Learning rate
-  max_epochs: 300             # Maximum number of epochs (exact number if no early stopping)
+  max_epochs: 100             # Maximum number of epochs (exact number if no early stopping)
   batch_size: 512             # Batch size for training
   batch_mult_val: 4           # Multiplier for validation batch size
 
@@ -158,3 +63,70 @@ pprgo:
 
   nprop_inference: 2          # Number of propagation steps during inference
   inf_fraction: 1.0           # Fraction of nodes for which local predictions are computed during inference
+
+
+# dataset:
+#   name: "PLACES_365"
+#   num_classes: 365
+#   image_size: 64
+#   partial: false
+#   subset_idxs: ["train"]
+#   original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/PLACES_365_dynamic_uncertainty_0.json"
+#   subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/PLACES_365_dynamic_uncertainty_0.json"
+  
+# models:
+#   names: ["resnet50-self-trained"]
+#   resnet50:
+#     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/dynamic_uncertainty.pth"
+
+# hyperparams:
+#   k_values: [10]
+#   distance: "euclidean"
+#   lr: 0.01
+#   epochs: 10000
+#   gnn:
+#     type: "gcn"  # Options: "gcn", "gat"
+#     hidden_layers: [512, 256, 128]
+
+# wandb:
+#   project: "GNN extrapolate"
+
+# output:
+#   extrapolated_scores_dir: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated"
+#   results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_cifar10.csv"
+
+# checkpoints:
+#   read_embeddings: true
+#   save_embeddings: true
+#   embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/places365/embeddings_dict.pth"
+#   read_knn: true
+#   save_knn: true
+#   knn_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/places365/knn.pth"
+#   read_edge_attr: true
+#   save_edge_attr: true
+#   edge_attr_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/places365/edge_attr.pth"
+
+# pprgo:
+#   alpha: 0.5                  # PPR teleport probability
+#   eps: 1e-4                   # Stopping threshold for ACL's ApproximatePR
+#   topk: 32                    # Number of PPR neighbors for each node
+#   ppr_normalization: 'sym'    # Adjacency matrix normalization for weighting neighbors
+
+#   hidden_size: 512            # Size of the MLP's hidden layer
+#   nlayers: 3                  # Number of MLP layers
+#   weight_decay: 1e-4          # Weight decay used for training the MLP
+#   dropout: 0.1                # Dropout used for training
+
+#   lr: 5e-3                    # Learning rate
+#   max_epochs: 300             # Maximum number of epochs (exact number if no early stopping)
+#   batch_size: 512             # Batch size for training
+#   batch_mult_val: 4           # Multiplier for validation batch size
+
+#   eval_step: 1               # Accuracy is evaluated after every this number of steps
+#   run_val: False              # Evaluate accuracy on validation set during training
+
+#   early_stop: False           # Use early stopping
+#   patience: 50                # Patience for early stopping
+
+#   nprop_inference: 2          # Number of propagation steps during inference
+#   inf_fraction: 1.0           # Fraction of nodes for which local predictions are computed during inference

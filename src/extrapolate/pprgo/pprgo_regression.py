@@ -1,8 +1,14 @@
+import sys
+
 import torch.nn as nn
 import torch.nn.functional as F
+from loguru import logger
 from torch_scatter import scatter
 
 from .pytorch_utils import MixedDropout, MixedLinear
+
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 class PPRGoMLP(nn.Module):

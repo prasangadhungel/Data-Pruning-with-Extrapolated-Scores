@@ -1,8 +1,12 @@
-import logging
+import sys
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from loguru import logger
+
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def run_batch(model, xbs, yb, optimizer, train):
@@ -109,7 +113,7 @@ def train(
                         ex.current_run.info["val"]["loss"].append(val_loss)
                         ex.current_run.info["val"]["acc"].append(val_acc)
 
-                    logging.info(
+                    logger.info(
                         f"Epoch {epoch}, step {step}: train {train_loss:.5f}, val {val_loss:.5f}"
                     )
 
@@ -125,7 +129,7 @@ def train(
                         model.load_state_dict(best_state)
                         return epoch + 1, loss_hist, acc_hist
                 else:
-                    logging.info(f"Epoch {epoch}, step {step}: train {train_loss:.5f}")
+                    logger.info(f"Epoch {epoch}, step {step}: train {train_loss:.5f}")
     if val_set is not None:
         model.load_state_dict(best_state)
     return epoch + 1, loss_hist, acc_hist

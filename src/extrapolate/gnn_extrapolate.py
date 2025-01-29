@@ -4,7 +4,6 @@ import random
 import sys
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn.functional as F
 from loguru import logger
@@ -333,12 +332,6 @@ def main(cfg_path: str):
 
             logger.info(f"Finished preparing data for k={k}")
 
-            # delete embeddings to free up memory
-            del embeddings
-            del labels_tensor
-            del trainset
-            del subset_scores_dict
-
             neighbor_samples = [
                 10,
                 10,
@@ -362,11 +355,7 @@ def main(cfg_path: str):
 
             model = GNN(input_dim=data.num_node_features, output_dim=1).to(device)
             optimizer = torch.optim.Adam(
-                [
-                    dict(params=model.conv1.parameters(), weight_decay=5e-4),
-                    dict(params=model.conv2.parameters(), weight_decay=5e-4),
-                    dict(params=model.conv3.parameters(), weight_decay=0),
-                ],
+                model.parameters(),
                 lr=0.001,
             )
 
@@ -441,7 +430,6 @@ def main(cfg_path: str):
                 -1,
                 -1,
             )
-            saved_scores = training_dict.copy()
 
             for epoch in range(cfg.hyperparams.epochs):
                 model.train()
@@ -459,6 +447,31 @@ def main(cfg_path: str):
                     loss.backward()
                     optimizer.step()
                     train_losses.append(loss)
+
+                    if batch_idx % 1000 == 0 and batch_idx > 0:
+                        (
+                            _,
+                            corr_train,
+                            spearman_train,
+                            corr_val,
+                            spearman_val,
+                            corr_test,
+                            spearman_test,
+                        ) = evaluate(
+                            model,
+                            all_loader,
+                            data.num_nodes,
+                            device,
+                            orig_train,
+                            orig_val,
+                            orig_test,
+                            data.train_mask,
+                            data.val_mask,
+                            data.test_mask,
+                        )
+                        logger.info(
+                            f"Batch={batch_idx} Train: {corr_train:3f} val: {corr_val:3f} test: {corr_test:3f}"
+                        )
 
                 logger.info(
                     f"GNN Epoch: {epoch}, Loss: {torch.stack(train_losses).mean().item():.5f}"
@@ -513,7 +526,7 @@ def main(cfg_path: str):
                     best_test_corr = corr_test
                     best_test_spearman = spearman_test
 
-                    saved_scores = training_dict.copy()
+                    saved_scores = subset_scores_dict.copy()
 
                     for i in unseed_samples:
                         saved_scores[str(i)] = all_preds[i].item()
@@ -548,7 +561,7 @@ def main(cfg_path: str):
 
 if __name__ == "__main__":
     default_config_path = os.path.join(
-        os.path.dirname(__file__), "configs", "gnn_config_copy.yaml"
+        os.path.dirname(__file__), "configs", "gnn_config.yaml"
     )
     config_path = parse_config(
         default_config=default_config_path, description="Run GNN Extrapolation"
