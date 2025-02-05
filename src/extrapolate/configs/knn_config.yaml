@@ -40,12 +40,12 @@ models:
     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/dynamic_uncertainty.pth"
 
 hyperparams:
-  k_values: [10]
+  k_values: [10, 20, 50, 100]
   distance: "euclidean"
 
 output:
   results_path: /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_places_365_new.csv
-  knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolation_new/knn_extrapolation
+  knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_extrapolation
 
 checkpoints:
   read_embeddings: true
