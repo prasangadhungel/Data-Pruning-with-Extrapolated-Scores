@@ -11,28 +11,30 @@ from scipy.stats import spearmanr
 from torch_cluster.knn import knn
 from tqdm import tqdm
 
-from prune.utils.argparse import parse_config
-from prune.utils.dataset import get_dataset
-from prune.utils.models import load_model_by_name
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from utils.argparse import parse_config
+from utils.dataset import prepare_data
+from utils.models import load_model_by_name
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def get_correlation(
-    embeddings_dict, subset_scores_dict, k, full_scores_dict, distance_metric, device
+    embeddings, subset_scores_dict, k, full_scores_dict, distance_metric, device
 ):
-    all_samples = [int(i) for i in embeddings_dict.keys()]
+    all_samples = list(range(len(embeddings)))
     seed_samples = [int(key) for key in subset_scores_dict.keys()]
 
     unseeded_samples = [s for s in all_samples if s not in seed_samples]
 
     unseed_embeddings = torch.stack(
-        [embeddings_dict[s].flatten() for s in unseeded_samples], dim=0
+        [embeddings[s].flatten() for s in unseeded_samples], dim=0
     ).to(device)
 
     seed_embeddings = torch.stack(
-        [embeddings_dict[s].flatten() for s in seed_samples], dim=0
+        [embeddings[s].flatten() for s in seed_samples], dim=0
     ).to(device)
 
     seed_scores_we_have = torch.tensor(
@@ -69,7 +71,7 @@ def get_correlation(
     # This will create CUDA OOM, so we need to compute in chunks
 
     B = seed_idx.shape[0]
-    chunk_size = 10000
+    chunk_size = 20000
 
     for i in range(0, B, chunk_size):
         end = min(i + chunk_size, B)
@@ -129,7 +131,7 @@ def main(cfg_path: str):
     for model_name in tqdm(cfg.models.names):
         if cfg.checkpoints.read_embeddings:
             logger.info("Reading embeddings")
-            embeddings_dict = torch.load(
+            embeddings = torch.load(
                 cfg.checkpoints.embeddings_file, map_location=device
             )
             logger.info(f"Loaded embeddings from {cfg.checkpoints.embeddings_file}")
@@ -137,12 +139,7 @@ def main(cfg_path: str):
         else:
             logger.info("Computing embeddings")
 
-            trainset, _ = get_dataset(
-                cfg.dataset.name,
-                partial=cfg.dataset.partial,
-                subset_idxs=cfg.dataset.subset_idxs,
-            )
-
+            trainset, train_loader, _, num_samples = prepare_data(cfg.dataset, 1024)
             embedding_model = load_model_by_name(
                 model_name,
                 cfg.dataset.num_classes,
@@ -152,16 +149,26 @@ def main(cfg_path: str):
             )
             embedding_model.eval()
 
-            embeddings_dict = {}
-            for i in tqdm(range(len(trainset)), mininterval=10, maxinterval=20):
-                sample, _, sample_idx = trainset[i]
-                sample = sample.to(device).unsqueeze(0)
+            sample_input, _, _ = trainset[0]
+            sample_input = sample_input.unsqueeze(0).to(device)
+            with torch.no_grad():
+                sample_output = embedding_model(sample_input)
+            embedding_dim = sample_output.shape[1]
+
+            embeddings = torch.zeros(num_samples, embedding_dim, device=device)
+
+            for images, _, sample_idxs in tqdm(
+                train_loader, mininterval=20, maxinterval=40
+            ):
+                images = images.to(device)
+                sample_idxs = sample_idxs.to(device)
                 with torch.no_grad():
-                    embedding_val = embedding_model(sample)
-                embeddings_dict[sample_idx] = embedding_val.cpu()
+                    batch_embeddings = embedding_model(images)
+
+                embeddings[sample_idxs] = batch_embeddings
 
             if cfg.checkpoints.save_embeddings:
-                torch.save(embeddings_dict, cfg.checkpoints.embeddings_file)
+                torch.save(embeddings, cfg.checkpoints.embeddings_file)
                 logger.info(f"Saved embeddings to {cfg.checkpoints.embeddings_file}")
 
         for k in tqdm(cfg.hyperparams.k_values):
@@ -173,7 +180,7 @@ def main(cfg_path: str):
                 spearman_weighted,
                 knn_dict,
             ) = get_correlation(
-                embeddings_dict,
+                embeddings,
                 subset_scores_dict,
                 k,
                 full_scores_dict,
