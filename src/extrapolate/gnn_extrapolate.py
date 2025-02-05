@@ -14,12 +14,12 @@ from torch_geometric.loader import NeighborLoader
 from torch_geometric.nn import GCNConv, knn_graph
 from tqdm import tqdm
 
-sys.path.append("/nfs/homedirs/dhp/unsupervised-data-pruning/src")
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from prune.utils.argparse import parse_config
-from prune.utils.dataset import prepare_data
-from prune.utils.models import load_model_by_name
+from utils.argparse import parse_config
+from utils.dataset import prepare_data
+from utils.models import load_model_by_name
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
@@ -89,10 +89,10 @@ def get_edges_and_attributes(
         # dist = (embeddings[src] - embeddings[dst]).pow(2).sum(dim=-1).sqrt()
 
         # if you have small CUDA memory, do this instead
-        chunk_size = 20000
+        chunk_size = 10000
         for i in range(0, len(src), chunk_size):
-            if i % 20 == 0:
-                logger.info(f"Processing chunk {i} to {i + chunk_size}")
+            # if i % 200 == 0:
+            #     logger.info(f"Processing chunk {i} to {i + chunk_size}")
 
             chunk_src = src[i : i + chunk_size]
             chunk_dst = dst[i : i + chunk_size]
@@ -255,8 +255,9 @@ def main(cfg_path: str):
     # full scores dict are just used for evaluation
     # we won't have access to them during training
     # but we will have access to subset scores dict
-    training_dict = full_scores_dict.copy()
-    training_dict.update(subset_scores_dict)
+    training_dict = subset_scores_dict.copy()
+    for samples in unseed_samples:
+        training_dict[str(samples)] = 0.0
 
     for model_name in tqdm(cfg.models.names):
         if cfg.checkpoints.read_embeddings:
@@ -322,10 +323,13 @@ def main(cfg_path: str):
                 k,
                 read_knn=cfg.checkpoints.read_knn,
                 save_knn=cfg.checkpoints.save_knn,
-                knn_file=cfg.checkpoints.knn_file,
+                knn_file=cfg.checkpoints.knn_path + "knn_k_" + str(k) + ".pth",
                 read_edge_attr=cfg.checkpoints.read_edge_attr,
                 save_edge_attr=cfg.checkpoints.save_edge_attr,
-                edge_attr_file=cfg.checkpoints.edge_attr_file,
+                edge_attr_file=cfg.checkpoints.edge_attr_path
+                + "edge_attr_k_"
+                + str(k)
+                + ".pth",
                 distance=cfg.hyperparams.distance,
                 device=device,
             ).to(device)
@@ -333,16 +337,16 @@ def main(cfg_path: str):
             logger.info(f"Finished preparing data for k={k}")
 
             neighbor_samples = [
-                10,
-                10,
+                k,
+                k,
             ]
 
             train_loader = NeighborLoader(
                 data,
                 num_neighbors=neighbor_samples,
-                batch_size=128,  # adjust based on your GPU memory
+                batch_size=128,
                 shuffle=True,
-                input_nodes=data.train_mask,  # root nodes = training nodes
+                input_nodes=data.train_mask,
             )
 
             all_loader = NeighborLoader(
@@ -423,7 +427,6 @@ def main(cfg_path: str):
                 step=0,
             )
 
-            # Training loop
             best_val_corr, best_val_spearman, best_test_corr, best_test_spearman = (
                 -1,
                 -1,
@@ -531,8 +534,7 @@ def main(cfg_path: str):
                     for i in unseed_samples:
                         saved_scores[str(i)] = all_preds[i].item()
 
-            # calculate correlation between saved scores and full scores
-
+            # calculate correlation
             logger.info(f"Best Val Corr: {best_val_corr} Spearman: {best_val_spearman}")
             logger.info(
                 f"Best Test Corr: {best_test_corr} Spearman: {best_test_spearman}"
@@ -557,6 +559,8 @@ def main(cfg_path: str):
                 "w",
             ) as f:
                 json.dump(saved_scores, f)
+
+            wandb.finish()
 
 
 if __name__ == "__main__":

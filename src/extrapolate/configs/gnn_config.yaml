@@ -41,7 +41,7 @@
 #     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset/dynamic_uncertainty.pth"
 
 # hyperparams:
-#   k_values: [10]
+#   k_values: [99]
 #   distance: "euclidean"
 #   lr: 0.01
 #   epochs: 25
@@ -60,12 +60,12 @@
 #   read_embeddings: true
 #   save_embeddings: false
 #   embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/CIFAR10/embeddings_dict.pth"
-#   read_knn: true
-#   save_knn: false
-#   knn_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/CIFAR10/knn.pth"
-#   read_edge_attr: true
-#   save_edge_attr: false
-#   edge_attr_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/CIFAR10/edge_attr.pth"
+#   read_knn: false
+#   save_knn: true
+#   knn_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/CIFAR10/"
+#   read_edge_attr: false
+#   save_edge_attr: true
+#   edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/CIFAR10/"
 
 dataset:
   name: "PLACES_365"
@@ -82,10 +82,10 @@ models:
     path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/dynamic_uncertainty.pth"
 
 hyperparams:
-  k_values: [10]
+  k_values: [10, 20, 50, 99]
   distance: "euclidean"
   lr: 0.01
-  epochs: 20
+  epochs: 25
   gnn:
     type: "gcn"  # Options: "gcn", "gat"
     hidden_layers: [512, 256, 128]
@@ -101,9 +101,9 @@ checkpoints:
   read_embeddings: true
   save_embeddings: true
   embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/places365/embeddings_dict.pth"
-  read_knn: true
+  read_knn: false
   save_knn: true
-  knn_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/places365/knn.pth"
-  read_edge_attr: true
-  save_edge_attr: false
-  edge_attr_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/places365/edge_attr.pth"
+  knn_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/places365/"
+  read_edge_attr: false
+  save_edge_attr: true
+  edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/places365/"
