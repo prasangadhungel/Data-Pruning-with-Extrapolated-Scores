@@ -344,7 +344,7 @@ def main(cfg_path: str):
             train_loader = NeighborLoader(
                 data,
                 num_neighbors=neighbor_samples,
-                batch_size=128,
+                batch_size=cfg.hyperparams.batch_size,
                 shuffle=True,
                 input_nodes=data.train_mask,
             )
@@ -360,7 +360,7 @@ def main(cfg_path: str):
             model = GNN(input_dim=data.num_node_features, output_dim=1).to(device)
             optimizer = torch.optim.Adam(
                 model.parameters(),
-                lr=0.001,
+                lr=cfg.hyperparams.lr,
             )
 
             orig_train = np.array(
