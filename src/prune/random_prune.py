@@ -3,6 +3,7 @@ import random
 import sys
 import time
 
+import numpy as np
 import torch
 import torch.optim as optim
 from loguru import logger
@@ -20,7 +21,10 @@ logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 def main(cfg_path: str):
     random.seed(42)
+    np.random.seed(42)
     torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
+
     cfg = OmegaConf.load(cfg_path)
     logger.info("Random Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

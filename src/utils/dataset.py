@@ -192,7 +192,7 @@ def get_transforms(mean, std, from_numpy=False, dataset_name="CIFAR10"):
     return transform_train, transform_test
 
 
-def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
+def get_dataset(dataset_name: str):
     if dataset_name == "CIFAR10":
         mean_cifar10 = (0.4914, 0.4822, 0.4465)
         std_cifar10 = (0.2470, 0.2435, 0.2616)
@@ -246,65 +246,22 @@ def get_dataset(dataset_name: str, partial=False, subset_idxs=[0]):
         mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
         std_cifar100_syn = (0.2748, 0.2640, 0.2858)
 
-        data = np.load("/nfs/homedirs/dhp/unsupervised-data-pruning/data/1m.npz")
+        data = np.load("/nfs/homedirs/dhp/unsupervised-data-pruning/data/cifar100_1m.npz")
 
         num_samples = len(data["label"])
-        np.random.seed(40)
-        if not partial:
-            indices = np.random.permutation(num_samples)
+        train_images = data["image"]
+        train_labels = data["label"]
 
-            train_images = data["image"][indices[: int(0.8 * num_samples)]]
-            train_labels = data["label"][indices[: int(0.8 * num_samples)]]
+        indices = np.arange(num_samples)
 
-            test_images = data["image"][indices[int(0.8 * num_samples) :]]
-            test_labels = data["label"][indices[int(0.8 * num_samples) :]]
+        transform_train, transform_test = get_transforms(
+            mean_cifar100_syn, std_cifar100_syn, from_numpy=True
+        )
 
-            mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
-            std_cifar100_syn = (0.2748, 0.2640, 0.2858)
-
-            transform_train, transform_test = get_transforms(
-                mean_cifar100_syn, std_cifar100_syn, from_numpy=True
-            )
-
-            trainset = CustomDatasetWithIndices(
-                train_images, train_labels, indices, transform=transform_train
-            )
-            testset = CustomDatasetWithIndices(
-                test_images, test_labels, indices, transform=transform_test
-            )
-
-        else:
-            images = data["image"]
-            labels = data["label"]
-
-            # read json /nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_10.0_percentage.json
-            with open(
-                "/nfs/homedirs/dhp/unsupervised-data-pruning/data/subset_indices_synthetic_cifar_1M_total_99_percentage.json",
-                "r",
-            ) as f:
-                indices_dict = json.load(f)
-
-            choosen_indices = []
-            for subset_idx in subset_idxs:
-                choosen_indices.extend(indices_dict[str(subset_idx)])
-
-            train_images = images[choosen_indices]
-            train_labels = labels[choosen_indices]
-
-            test_images = images[indices_dict["test"]]
-            test_labels = labels[indices_dict["test"]]
-
-            mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
-            std_cifar100_syn = (0.2748, 0.2640, 0.2858)
-
-            transform_train, transform_test = get_transforms(
-                mean_cifar100_syn, std_cifar100_syn, from_numpy=True
-            )
-
-            trainset = CustomDatasetWithIndices(
-                train_images, train_labels, choosen_indices, transform=transform_train
-            )
-            testset = CustomDataset(test_images, test_labels, transform=transform_test)
+        trainset = CustomDatasetWithIndices(
+            train_images, train_labels, indices, transform=transform_train
+        )
+        testset = None
 
     return trainset, testset
 
@@ -336,9 +293,7 @@ def get_dataloaders_from_dataset(trainset, testset, batch_size: int = 128):
 def prepare_data(dataset_cfg, batch_size):
     if dataset_cfg.name == "SYNTHETIC_CIFAR100_1M":
         trainset, testset = get_dataset(
-            dataset_cfg.name,
-            partial=dataset_cfg.get("partial", False),
-            subset_idxs=dataset_cfg.get("subset", None),
+            dataset_cfg.name
         )
         train_loader, _ = get_dataloaders_from_dataset(
             trainset, testset, batch_size=batch_size

@@ -3,6 +3,7 @@ import os
 import random
 import sys
 
+import numpy as np
 import torch
 from loguru import logger
 from omegaconf import OmegaConf
@@ -17,7 +18,10 @@ logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 def main(cfg_path: str):
     random.seed(42)
+    np.random.seed(42)
     torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
+
     cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

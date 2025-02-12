@@ -32,7 +32,7 @@ class GNN(torch.nn.Module):
         self.conv2 = GCNConv(512, 256)
         self.conv3 = GCNConv(256, output_dim)
         self.dropout = dropout
-
+    
     def forward(self, x, edge_index, edge_attr):
         x = self.conv1(x, edge_index, edge_attr)
         x = F.relu(x)
@@ -210,23 +210,29 @@ def evaluate(
     pred_train = all_preds[train_mask].detach().cpu().numpy()
     corr_train = np.corrcoef(orig_train, pred_train)[0, 1]
     spearman_train = spearmanr(orig_train, pred_train).correlation
+    mse_train = np.mean((orig_train - pred_train) ** 2)    
 
     pred_val = all_preds[val_mask].detach().cpu().numpy()
     corr_val = np.corrcoef(orig_val, pred_val)[0, 1]
     spearman_val = spearmanr(orig_val, pred_val).correlation
+    mse_val = np.mean((orig_val - pred_val) ** 2)
 
     pred_test = all_preds[test_mask].detach().cpu().numpy()
     corr_test = np.corrcoef(orig_test, pred_test)[0, 1]
     spearman_test = spearmanr(orig_test, pred_test).correlation
+    mse_test = np.mean((orig_test - pred_test) ** 2)
 
     return (
         all_preds,
         corr_train,
         spearman_train,
+        mse_train,
         corr_val,
         spearman_val,
+        mse_val,
         corr_test,
         spearman_test,
+        mse_test,
     )
 
 
@@ -389,10 +395,13 @@ def main(cfg_path: str):
                 all_preds,
                 corr_train,
                 spearman_train,
+                mse_train,
                 corr_val,
                 spearman_val,
+                mse_val,
                 corr_test,
                 spearman_test,
+                mse_test,
             ) = evaluate(
                 model,
                 all_loader,
@@ -407,22 +416,26 @@ def main(cfg_path: str):
             )
 
             logger.info(
-                f"[Before training] Corr train: {corr_train} Spearman train: {spearman_train}"
+                f"[Before training] Train - Corr: {corr_train:3f} Spearman: {spearman_train:3f} MSE: {mse_train:4f}"
             )
             logger.info(
-                f"[Before training] Corr val: {corr_val} Spearman val: {spearman_val}"
+                f"[Before training] Val - Corr: {corr_val:3f} Spearman: {spearman_val:3f} MSE: {mse_val:4f}"
             )
             logger.info(
-                f"[Before training] Corr test: {corr_test} Spearman test: {spearman_test}"
+                f"[Before training] Test - Corr: {corr_test:3f} Spearman: {spearman_test:3f} MSE: {mse_test:4f}"
             )
+
             wandb.log(
                 {
                     "Train Correlation": corr_train,
                     "Train Spearman": spearman_train,
+                    "Train MSE": mse_train,
                     "Val Correlation": corr_val,
                     "Val Spearman": spearman_val,
+                    "Val MSE": mse_val,
                     "Test Correlation": corr_test,
                     "Test Spearman": spearman_test,
+                    "Test MSE": mse_test,
                 },
                 step=0,
             )
@@ -456,10 +469,13 @@ def main(cfg_path: str):
                             _,
                             corr_train,
                             spearman_train,
+                            mse_train,
                             corr_val,
                             spearman_val,
+                            mse_val,
                             corr_test,
                             spearman_test,
+                            mse_test,
                         ) = evaluate(
                             model,
                             all_loader,
@@ -484,10 +500,13 @@ def main(cfg_path: str):
                     all_preds,
                     corr_train,
                     spearman_train,
+                    mse_train,
                     corr_val,
                     spearman_val,
+                    mse_val,
                     corr_test,
                     spearman_test,
+                    mse_test,
                 ) = evaluate(
                     model,
                     all_loader,
@@ -502,22 +521,26 @@ def main(cfg_path: str):
                 )
 
                 logger.info(
-                    f"Step={epoch} Corr train: {corr_train} Spearman train: {spearman_train}"
+                    f"Step={epoch} Train - Corr: {corr_train:3f} Spearman: {spearman_train:3f} MSE: {mse_train:4f}"
                 )
                 logger.info(
-                    f"Step={epoch} Corr val: {corr_val} Spearman val: {spearman_val}"
+                    f"Step={epoch} Val - Corr: {corr_val:3f} Spearman: {spearman_val:3f} MSE: {mse_val:4f}"
                 )
                 logger.info(
-                    f"Step={epoch} Corr test: {corr_test} Spearman test: {spearman_test}"
+                    f"Step={epoch} Test - Corr: {corr_test:3f} Spearman: {spearman_test:3f} MSE: {mse_test:4f}"
                 )
+
                 wandb.log(
                     {
                         "Train Correlation": corr_train,
                         "Train Spearman": spearman_train,
+                        "Train MSE": mse_train,
                         "Val Correlation": corr_val,
                         "Val Spearman": spearman_val,
+                        "Val MSE": mse_val,
                         "Test Correlation": corr_test,
                         "Test Spearman": spearman_test,
+                        "Test MSE": mse_test,
                     },
                     step=epoch + 1,
                 )

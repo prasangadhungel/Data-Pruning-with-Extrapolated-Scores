@@ -43,7 +43,8 @@
 # hyperparams:
 #   k_values: [10]
 #   distance: "euclidean"
-#   lr: 0.01
+#   lr: 0.001
+#   batch_size: 128
 #   epochs: 25
 #   gnn:
 #     type: "gcn"  # Options: "gcn", "gat"

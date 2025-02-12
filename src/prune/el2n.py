@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 def main(cfg_path: str):
     random.seed(42)
+    np.random.seed(42)
     torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
+
     cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_train_examples = prepare_data(

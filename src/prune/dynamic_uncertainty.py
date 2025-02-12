@@ -4,10 +4,14 @@ import random
 import sys
 import time
 
+import numpy as np
 import torch
 from loguru import logger
 from omegaconf import OmegaConf
 from torch.optim import Adam
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
@@ -81,16 +85,19 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
             calculate_uncertainty(history[i + 2 : i + 2 + uncertainty_window])
             for i in range(len(history) - uncertainty_window - 1)
         ]
-        dynamic_uncertainty[sample_idx] = sum(std_devs) / len(std_devs)
+        dynamic_uncertainty[int(sample_idx)] = sum(std_devs) / len(std_devs)
 
     return dynamic_uncertainty
 
 
 def main(cfg_path: str):
     random.seed(42)
+    np.random.seed(42)
     torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
 
     cfg = OmegaConf.load(cfg_path)
+    cfg = cfg.SYNTHETIC_CIFAR100_1M
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
