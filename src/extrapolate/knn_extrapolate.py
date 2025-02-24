@@ -115,6 +115,8 @@ def get_correlation(
 
 def main(cfg_path: str):
     cfg = OmegaConf.load(cfg_path)
+    cfg = cfg.SYNTHETIC_CIFAR100_1M
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with open(cfg.dataset.original_scores_file) as f:

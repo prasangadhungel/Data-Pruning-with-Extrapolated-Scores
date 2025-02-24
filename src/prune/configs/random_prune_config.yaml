@@ -33,8 +33,7 @@ experiment:
 dataset:
   name: "PLACES_365"
   num_classes: 365
-  partial: false
-  subset: []
+  image_size: 64
 
 model:
   name: "ResNet50"
@@ -50,6 +49,3 @@ pruning:
 
 logging:
   log_interval: 15000
-
-paths:
-  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"

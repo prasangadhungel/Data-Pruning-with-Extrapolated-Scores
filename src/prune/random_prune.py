@@ -8,6 +8,9 @@ import torch
 import torch.optim as optim
 from loguru import logger
 from omegaconf import OmegaConf
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
@@ -59,9 +62,11 @@ def main(cfg_path: str):
             wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
 
             # Initialize the model
-            model = get_model(cfg.model.name, num_classes=cfg.dataset.num_classes).to(
-                device
-            )
+            model = get_model(
+                model_name=cfg.model.name,
+                num_classes=cfg.dataset.num_classes,
+                image_size=cfg.dataset.image_size,
+            ).to(device)
 
             # Define the loss function, optimizer, and scheduler
             optimizer = optim.Adam(

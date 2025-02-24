@@ -1,65 +1,109 @@
-# experiment:
-#   num_iterations: 1
+CIFAR10:
+  experiment:
+    num_iterations: 1
 
-# dataset:
-#   name: "CIFAR10"
-#   num_classes: 10
-#   partial: false
-#   image_size: 32
-#   subset: []
+  dataset:
+    name: "CIFAR10"
+    num_classes: 10
+    image_size: 32
+    for_extrapolation:
+      value: true
+      subset_size: 20000
 
-# model:
-#   name: "ResNet50"
+  model:
+    name: "ResNet50"
 
-# training:
-#   batch_size: 128
-#   num_epochs: 50
-#   lr: 0.001
-#   weight_decay: 0.001
+  training:
+    batch_size: 128
+    num_epochs: 50
+    lr: 0.001
+    weight_decay: 0.001
 
-# pruning:
-#   prune: true
-#   window: 10
-#   num_epochs: 16
-#   trajectory: 10
-#   decay: 0.9
-#   percentages: [0.5, 0.2, 0.1]
+  pruning:
+    prune: false
+    window: 10
+    num_epochs: 20
+    trajectory: 20
+    decay: 0.9
+    percentages: [0.5, 0.2, 0.1]
 
-# logging:
-#   log_interval: 15000
+  logging:
+    log_interval: 15000
 
-# paths:
-#   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+  paths:
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data"
 
-experiment:
-  num_iterations: 1
 
-dataset:
-  name: "PLACES_365"
-  num_classes: 365
-  partial: false
-  image_size: 64
-  subset: []
+SYNTHETIC_CIFAR100_1M:
+  experiment:
+    num_iterations: 1
 
-model:
-  name: "ResNet50"
+  dataset:
+    name: "SYNTHETIC_CIFAR100_1M"
+    num_classes: 100
+    image_size: 32
+    for_extrapolation:
+      value: true
+      subset_size: 200000
 
-training:
-  batch_size: 128
-  num_epochs: 50
-  lr: 0.001
-  weight_decay: 0.001
+  model:
+    name: "ResNet50"
 
-pruning:
-  prune: true
-  window: 10
-  num_epochs: 16
-  trajectory: 10
-  decay: 0.9
-  percentages: [0.2, 0.1]
+  training:
+    batch_size: 256
+    num_epochs: 50
+    lr: 0.001
+    weight_decay: 0.001
 
-logging:
-  log_interval: 15000
+  pruning:
+    prune: false
+    window: 10
+    num_epochs: 50
+    trajectory: 50
+    decay: 0.9
+    percentages: [0.5, 0.2, 0.1]
 
-paths:
-  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+  logging:
+    log_interval: 15000
+
+  paths:
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+
+
+PLACES_365:
+  experiment:
+    num_iterations: 1
+
+  dataset:
+    name: "PLACES_365"
+    num_classes: 365
+    image_size: 64
+    for_extrapolation:
+      value: false
+      subset_size: 450000
+
+  model:
+    name: "ResNet50"
+
+  training:
+    batch_size: 128
+    num_epochs: 50
+    lr: 0.001
+    weight_decay: 0.001
+
+  pruning:
+    prune: true
+    window: 10
+    num_epochs: 16
+    trajectory: 10
+    decay: 0.9
+    percentages: [0.2, 0.1]
+
+  logging:
+    log_interval: 15000
+
+  paths:
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"

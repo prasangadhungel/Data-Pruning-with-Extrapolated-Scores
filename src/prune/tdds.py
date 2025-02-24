@@ -11,6 +11,9 @@ from numpy import linalg as LA
 from omegaconf import OmegaConf
 from scipy.special import softmax
 from torch.optim import Adam
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
@@ -91,12 +94,29 @@ def main(cfg_path: str):
 
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
+    cfg = cfg.SYNTHETIC_CIFAR100_1M
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    trainset, train_loader, test_loader, _ = prepare_data(
+    trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
+
+    if cfg.dataset.for_extrapolation.value is True:
+        indices_to_keep = random.sample(
+            range(num_samples), cfg.dataset.for_extrapolation.subset_size
+        )
+
+        mapping = {original_idx: new_idx for new_idx, original_idx in enumerate(indices_to_keep)}
+        reversed_mapping = {new_idx: original_idx for new_idx, original_idx in enumerate(indices_to_keep)}
+
+        trainset = torch.utils.data.Subset(trainset, indices_to_keep)
+        train_loader = torch.utils.data.DataLoader(
+            trainset,
+            batch_size=cfg.training.batch_size,
+            shuffle=True,
+            num_workers=2,
+        )
 
     for num_itr in range(cfg.experiment.num_iterations):
         # Initialize model and optimizer
@@ -108,9 +128,7 @@ def main(cfg_path: str):
 
         optimizer = Adam(model.parameters(), lr=cfg.training.lr)
 
-        criterion = torch.nn.CrossEntropyLoss()
-        model.cuda()
-        criterion.cuda()
+        torch.cuda.empty_cache()
         output_epochs, loss_epochs, index_epochs = [], [], []
         for epoch in range(cfg.pruning.num_epochs):
             train_losses = []
@@ -120,13 +138,18 @@ def main(cfg_path: str):
                 input_var = torch.autograd.Variable(data)
                 target_var = torch.autograd.Variable(target)
                 output = model(input_var)
-                loss = criterion(output, target_var)
+                loss = torch.nn.functional.cross_entropy(output, target)
                 loss_batch = (
                     torch.nn.functional.cross_entropy(output, target_var, reduce=False)
                     .detach()
                     .cpu()
                 )
+
                 index_batch = sample_idx
+
+                # use the mapped indices if the dataset is for extrapolation
+                if cfg.dataset.for_extrapolation.value is True:
+                    index_batch = [mapping[idx.item()] for idx in index_batch]
 
                 if batch_idx == 0:
                     loss_epoch = np.array(loss_batch)
@@ -166,12 +189,18 @@ def main(cfg_path: str):
                 f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Accuracy: {test_acc:.5f}"
             )
 
+        torch.save(model.state_dict(), f"{cfg.paths.models}/tdds.pth")
+
         logger.info("Computing Importance Scores")
         output_epochs = np.array(output_epochs[: cfg.pruning.trajectory])
         loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
         index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
 
         tdds_score = generate(output_epochs, loss_epochs, index_epochs, cfg)
+        
+        if cfg.dataset.for_extrapolation.value is True:
+            tdds_score = {reversed_mapping[key]: value for key, value in tdds_score.items()}
+
         output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_tdds_{num_itr}.json"
 
         with open(output_path, "w") as f:
