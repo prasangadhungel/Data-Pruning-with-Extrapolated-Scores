@@ -14,18 +14,20 @@ CIFAR10:
     name: "ResNet50"
 
   training:
-    batch_size: 128
+    batch_size: 256
     num_epochs: 50
     lr: 0.001
-    weight_decay: 0.001
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
 
   pruning:
     prune: false
     window: 10
-    num_epochs: 20
-    trajectory: 20
+    num_epochs: 50
+    trajectory: 10
     decay: 0.9
-    percentages: [0.5, 0.2, 0.1]
+    percentages: [0.2, 0.1]
 
   logging:
     log_interval: 15000
@@ -89,14 +91,16 @@ PLACES_365:
 
   training:
     batch_size: 128
-    num_epochs: 50
+    num_epochs: 42
     lr: 0.001
-    weight_decay: 0.001
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
 
   pruning:
-    prune: true
+    prune: false
     window: 10
-    num_epochs: 16
+    num_epochs: 42
     trajectory: 10
     decay: 0.9
     percentages: [0.2, 0.1]

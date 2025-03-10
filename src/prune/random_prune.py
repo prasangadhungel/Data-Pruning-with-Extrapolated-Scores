@@ -29,6 +29,7 @@ def main(cfg_path: str):
     torch.cuda.manual_seed(42)
 
     cfg = OmegaConf.load(cfg_path)
+    cfg = cfg.PLACES_365
     logger.info("Random Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(

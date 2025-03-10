@@ -94,7 +94,7 @@ def main(cfg_path: str):
 
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.SYNTHETIC_CIFAR100_1M
+    cfg = cfg.PLACES_365
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
@@ -126,11 +126,20 @@ def main(cfg_path: str):
             image_size=cfg.dataset.image_size,
         ).to(device)
 
-        optimizer = Adam(model.parameters(), lr=cfg.training.lr)
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=cfg.training.lr,
+            momentum=cfg.training.momentum,
+            weight_decay=cfg.training.weight_decay,
+            nesterov=cfg.training.nesterov,
+        )
 
-        torch.cuda.empty_cache()
+        criterion = torch.nn.CrossEntropyLoss()
+        model.cuda()
+        criterion.cuda()
+
         output_epochs, loss_epochs, index_epochs = [], [], []
-        for epoch in range(cfg.pruning.num_epochs):
+        for epoch in range(cfg.training.num_epochs):
             train_losses = []
 
             for batch_idx, (data, target, sample_idx) in enumerate(train_loader):
@@ -138,7 +147,10 @@ def main(cfg_path: str):
                 input_var = torch.autograd.Variable(data)
                 target_var = torch.autograd.Variable(target)
                 output = model(input_var)
-                loss = torch.nn.functional.cross_entropy(output, target)
+                loss = criterion(output, target_var)
+
+                # loss = torch.nn.functional.cross_entropy(output, target)
+                
                 loss_batch = (
                     torch.nn.functional.cross_entropy(output, target_var, reduce=False)
                     .detach()
@@ -195,6 +207,10 @@ def main(cfg_path: str):
         output_epochs = np.array(output_epochs[: cfg.pruning.trajectory])
         loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
         index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
+        
+        logger.info(f"Shape of output_epochs: {output_epochs.shape}")
+        logger.info(f"Shape of loss_epochs: {loss_epochs.shape}")
+        logger.info(f"Shape of index_epochs: {index_epochs.shape}")
 
         tdds_score = generate(output_epochs, loss_epochs, index_epochs, cfg)
         

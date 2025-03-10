@@ -5,13 +5,13 @@ CIFAR10:
     image_size: 32
     partial: false
     subset_idxs: ["train"]
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_tdds_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_tdds_0.json"
     
   models:
     names: ["resnet50-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset/dynamic_uncertainty.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data/tdds.pth"
 
   hyperparams:
     k_values: [10]

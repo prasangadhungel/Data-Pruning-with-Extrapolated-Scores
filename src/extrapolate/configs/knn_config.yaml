@@ -3,16 +3,18 @@ CIFAR10:
     name: "CIFAR10"
     num_classes: 10
     image_size: 32
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
+    partial: false
+    subset_idxs: ["train"]
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_tdds_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_tdds_0.json"
     
   models:
     names: ["resnet50-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset/dynamic_uncertainty.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data/tdds.pth"
 
   hyperparams:
-    k_values: [10]
+    k_values: [10, 20, 50, 100]
     distance: "euclidean"
 
   output:
@@ -20,7 +22,7 @@ CIFAR10:
     knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_extrapolation
 
   checkpoints:
-    read_embeddings: true
+    read_embeddings: false
     save_embeddings: false
     embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/CIFAR10/embeddings_dict.pth"
 

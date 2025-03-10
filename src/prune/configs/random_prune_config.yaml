@@ -1,51 +1,48 @@
-# For Synthetic CIFAR100 1M dataset
-# experiment:
-#   num_iterations: 1
+SYNTHETIC_CIFAR100_1M:
+  experiment:
+    num_iterations: 1
 
-# dataset:
-#   name: "SYNTHETIC_CIFAR100_1M"
-#   num_classes: 100
-#   partial: true
-#   subset: ["train"]
+  dataset:
+    name: "SYNTHETIC_CIFAR100_1M"
+    num_classes: 100
+    image_size: 32
 
-# model:
-#   name: "ResNet50"
+  model:
+    name: "ResNet50"
 
-# training:
-#   batch_size: 256
-#   num_epochs: 3
-#   lr: 0.001
-#   weight_decay: 0.001
+  training:
+    batch_size: 256
+    num_epochs: 50
+    lr: 0.001
+    weight_decay: 0.001
 
-# pruning:
-#   percentages: [0, 0.1, 0.2, 0.5]
+  pruning:
+    percentages: [0.8, 0.9, 0.95]
 
-# logging:
-#   log_interval: 1000
+  logging:
+    log_interval: 15000
 
-# paths:
-#   scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"
 
-# For PLACES365 dataset
-experiment:
-  num_iterations: 1
+PLACES_365:
+  experiment:
+    num_iterations: 1
 
-dataset:
-  name: "PLACES_365"
-  num_classes: 365
-  image_size: 64
+  dataset:
+    name: "PLACES_365"
+    num_classes: 365
+    image_size: 64
 
-model:
-  name: "ResNet50"
+  model:
+    name: "ResNet50"
 
-training:
-  batch_size: 128
-  num_epochs: 50
-  lr: 0.001
-  weight_decay: 0.001
+  training:
+    batch_size: 128
+    num_epochs: 50
+    lr: 0.001
+    weight_decay: 0.001
 
-pruning:
-  percentages: [0, 0.1, 0.2, 0.5]
+  pruning:
+    percentages: [0, 0.1, 0.2, 0.5]
 
-logging:
-  log_interval: 15000
+  logging:
+    log_interval: 15000
