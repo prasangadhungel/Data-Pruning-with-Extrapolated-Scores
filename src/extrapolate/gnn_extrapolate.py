@@ -32,7 +32,7 @@ class GNN(torch.nn.Module):
         self.conv2 = GCNConv(512, 256)
         self.conv3 = GCNConv(256, output_dim)
         self.dropout = dropout
-    
+
     def forward(self, x, edge_index, edge_attr):
         x = self.conv1(x, edge_index, edge_attr)
         x = F.relu(x)
@@ -210,7 +210,7 @@ def evaluate(
     pred_train = all_preds[train_mask].detach().cpu().numpy()
     corr_train = np.corrcoef(orig_train, pred_train)[0, 1]
     spearman_train = spearmanr(orig_train, pred_train).correlation
-    mse_train = np.mean((orig_train - pred_train) ** 2)    
+    mse_train = np.mean((orig_train - pred_train) ** 2)
 
     pred_val = all_preds[val_mask].detach().cpu().numpy()
     corr_val = np.corrcoef(orig_val, pred_val)[0, 1]

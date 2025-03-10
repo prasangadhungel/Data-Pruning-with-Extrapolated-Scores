@@ -9,6 +9,7 @@ import torch
 from loguru import logger
 from omegaconf import OmegaConf
 from torch.optim import Adam
+
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate

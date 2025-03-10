@@ -246,7 +246,9 @@ def get_dataset(dataset_name: str):
         mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
         std_cifar100_syn = (0.2748, 0.2640, 0.2858)
 
-        data = np.load("/nfs/homedirs/dhp/unsupervised-data-pruning/data/cifar100_1m.npz")
+        data = np.load(
+            "/nfs/homedirs/dhp/unsupervised-data-pruning/data/cifar100_1m.npz"
+        )
 
         num_samples = len(data["label"])
         train_images = data["image"]
@@ -292,9 +294,7 @@ def get_dataloaders_from_dataset(trainset, testset, batch_size: int = 128):
 
 def prepare_data(dataset_cfg, batch_size):
     if dataset_cfg.name == "SYNTHETIC_CIFAR100_1M":
-        trainset, testset = get_dataset(
-            dataset_cfg.name
-        )
+        trainset, testset = get_dataset(dataset_cfg.name)
         train_loader, _ = get_dataloaders_from_dataset(
             trainset, testset, batch_size=batch_size
         )

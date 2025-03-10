@@ -7,10 +7,10 @@ import torch
 import torch.optim as optim
 from loguru import logger
 from omegaconf import OmegaConf
-from utils.evaluate import evaluate, get_top_k_accuracy
-from utils.models import get_model
 
 import wandb
+from utils.evaluate import evaluate, get_top_k_accuracy
+from utils.models import get_model
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")

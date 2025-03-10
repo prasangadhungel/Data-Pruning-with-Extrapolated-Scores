@@ -107,8 +107,14 @@ def main(cfg_path: str):
             range(num_samples), cfg.dataset.for_extrapolation.subset_size
         )
 
-        mapping = {original_idx: new_idx for new_idx, original_idx in enumerate(indices_to_keep)}
-        reversed_mapping = {new_idx: original_idx for new_idx, original_idx in enumerate(indices_to_keep)}
+        mapping = {
+            original_idx: new_idx
+            for new_idx, original_idx in enumerate(indices_to_keep)
+        }
+        reversed_mapping = {
+            new_idx: original_idx
+            for new_idx, original_idx in enumerate(indices_to_keep)
+        }
 
         trainset = torch.utils.data.Subset(trainset, indices_to_keep)
         train_loader = torch.utils.data.DataLoader(
@@ -150,7 +156,7 @@ def main(cfg_path: str):
                 loss = criterion(output, target_var)
 
                 # loss = torch.nn.functional.cross_entropy(output, target)
-                
+
                 loss_batch = (
                     torch.nn.functional.cross_entropy(output, target_var, reduce=False)
                     .detach()
@@ -207,15 +213,17 @@ def main(cfg_path: str):
         output_epochs = np.array(output_epochs[: cfg.pruning.trajectory])
         loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
         index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
-        
+
         logger.info(f"Shape of output_epochs: {output_epochs.shape}")
         logger.info(f"Shape of loss_epochs: {loss_epochs.shape}")
         logger.info(f"Shape of index_epochs: {index_epochs.shape}")
 
         tdds_score = generate(output_epochs, loss_epochs, index_epochs, cfg)
-        
+
         if cfg.dataset.for_extrapolation.value is True:
-            tdds_score = {reversed_mapping[key]: value for key, value in tdds_score.items()}
+            tdds_score = {
+                reversed_mapping[key]: value for key, value in tdds_score.items()
+            }
 
         output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_tdds_{num_itr}.json"
 

@@ -11,12 +11,11 @@ from omegaconf import OmegaConf
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+import wandb
 from utils.argparse import parse_config
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
-
-import wandb
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
