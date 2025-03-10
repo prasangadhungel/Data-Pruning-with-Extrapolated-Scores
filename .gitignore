@@ -177,3 +177,7 @@ wandb/
 scripts/
 outputs/
 models/
+checkpoint/
+experiments/
+past_logs/
+reports/
