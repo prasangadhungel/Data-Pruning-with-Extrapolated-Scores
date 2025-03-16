@@ -247,12 +247,22 @@ def main(cfg_path: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, train_loader, _, num_samples = prepare_data(cfg.dataset, 1024)
+    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
-    with open(cfg.dataset.original_scores_file) as f:
+    with open(cfg.scores.original_scores_file) as f:
         full_scores_dict = json.load(f)
 
-    with open(cfg.dataset.subset_scores_file) as f:
+    with open(cfg.scores.subset_scores_file) as f:
         subset_scores_dict = json.load(f)
+
+    logger.info(f"Number of samples in subset: {len(subset_scores_dict)}")
+    subset_scores_np = np.array([subset_scores_dict[str(i)] for i in range(len(full_scores_dict.keys())) if str(i) in subset_scores_dict])
+    full_scores_np = np.array([full_scores_dict[str(i)] for i in range(len(full_scores_dict.keys())) if str(i) in subset_scores_dict])
+
+    corr = np.corrcoef(full_scores_np, subset_scores_np)[0, 1]
+    spearman = spearmanr(full_scores_np, subset_scores_np).correlation
+    mse = np.mean((full_scores_np - subset_scores_np) ** 2)
+    logger.info(f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}")
 
     labels_tensor = torch.zeros(num_samples, dtype=torch.int64, device=device)
     seed_samples = [int(key) for key in subset_scores_dict.keys()]
@@ -344,8 +354,8 @@ def main(cfg_path: str):
             logger.info(f"Finished preparing data for k={k}")
 
             neighbor_samples = [
-                k,
-                k,
+                10,
+                10,
             ]
 
             train_loader = NeighborLoader(
@@ -372,14 +382,14 @@ def main(cfg_path: str):
 
             orig_train = np.array(
                 [
-                    full_scores_dict[str(i)]
+                    subset_scores_dict[str(i)]
                     for i in range(num_samples)
                     if data.train_mask[i]
                 ]
             )
             orig_val = np.array(
                 [
-                    full_scores_dict[str(i)]
+                    subset_scores_dict[str(i)]
                     for i in range(num_samples)
                     if data.val_mask[i]
                 ]
@@ -579,7 +589,7 @@ def main(cfg_path: str):
             )
 
             with open(
-                f"{cfg.output.gnn_dict_path}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_euclidean.json",
+                f"{cfg.output.gnn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_euclidean.json",
                 "w",
             ) as f:
                 json.dump(saved_scores, f)

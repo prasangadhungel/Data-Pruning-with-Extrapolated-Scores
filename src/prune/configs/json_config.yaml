@@ -3,9 +3,12 @@ SYNTHETIC_CIFAR100_1M:
     num_iterations: 1
 
   dataset:
-    name: "CIFAR10"
-    num_classes: 10
+    name: "SYNTHETIC_CIFAR100_1M"
+    num_classes: 100
     image_size: 32
+
+  model:
+    name: "ResNet50"
 
   training:
     batch_size: 256
@@ -19,8 +22,8 @@ SYNTHETIC_CIFAR100_1M:
   logging:
     log_interval: 15000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_extrapolation_PLACES_365_resnet50-self-trained_k_50_seed_450000_euclidean.json"
-  wandb_name: "knn-extrapolation"
+  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_last_tdds_0.json"
+  wandb_name: "TDDS-"
 
 PLACES_365:
   experiment:

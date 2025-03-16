@@ -94,7 +94,7 @@ def main(cfg_path: str):
 
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.PLACES_365
+    cfg = cfg.SYNTHETIC_CIFAR100_1M
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
@@ -207,12 +207,26 @@ def main(cfg_path: str):
                 f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Accuracy: {test_acc:.5f}"
             )
 
-        torch.save(model.state_dict(), f"{cfg.paths.models}/tdds.pth")
+        model_name = f"{cfg.paths.models}/tdds"
+        if cfg.dataset.for_extrapolation.value is True:
+            model_name += f"_{cfg.dataset.for_extrapolation.subset_size}"
+        
+        model_name += f".pth"
+
+        torch.save(model.state_dict(), model_name)
+
+        logger.info(f"Saved model to {model_name}")
 
         logger.info("Computing Importance Scores")
-        output_epochs = np.array(output_epochs[: cfg.pruning.trajectory])
-        loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
-        index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
+        # output_epochs = np.array(output_epochs[: cfg.pruning.trajectory])
+        # instead take the last trajectory epochs
+        output_epochs = np.array(output_epochs[-cfg.pruning.trajectory :])
+
+        # loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
+        loss_epochs = np.array(loss_epochs[-cfg.pruning.trajectory :])
+
+        # index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
+        index_epochs = np.array(index_epochs[-cfg.pruning.trajectory :])
 
         logger.info(f"Shape of output_epochs: {output_epochs.shape}")
         logger.info(f"Shape of loss_epochs: {loss_epochs.shape}")
@@ -225,10 +239,17 @@ def main(cfg_path: str):
                 reversed_mapping[key]: value for key, value in tdds_score.items()
             }
 
-        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_tdds_{num_itr}.json"
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_last_tdds_{num_itr}"
+
+        if cfg.dataset.for_extrapolation.value is True:
+            output_path += f"_{cfg.dataset.for_extrapolation.subset_size}"
+        
+        output_path += ".json"
 
         with open(output_path, "w") as f:
             json.dump(tdds_score, f)
+
+        logger.info(f"Saved tdds scores to {output_path}")
 
         if cfg.pruning.prune is True:
             prune(

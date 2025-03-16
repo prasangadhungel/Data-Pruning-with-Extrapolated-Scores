@@ -76,8 +76,17 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
         )
 
     # save model
-    torch.save(model.state_dict(), f"{cfg.paths.models}/dynamic_uncertainty.pth")
+    model_name = f"{cfg.paths.models}/dynamic_uncertainty"
+
+    if cfg.dataset.for_extrapolation.value is True:
+        model_name += f"_{cfg.dataset.for_extrapolation.subset_size}"
+
+    model_name += ".pth"
+
+    torch.save(model.state_dict(), model_name)
     # Save dynamic uncertainty scores
+    
+    logger.info(f"Saved model to {model_name}")
 
     dynamic_uncertainty = {}
     for sample_idx, history in uncertainty_history.items():
@@ -91,13 +100,13 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    random.seed(43)
+    np.random.seed(43)
+    torch.manual_seed(43)
+    torch.cuda.manual_seed(43)
 
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.PLACES_365
+    cfg = cfg.SYNTHETIC_CIFAR100_1M
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
@@ -123,11 +132,18 @@ def main(cfg_path: str):
         )
 
         output_path = (
-            f"{cfg.paths.scores}/{cfg.dataset.name}_dynamic_uncertainty_{num_itr}.json"
+            f"{cfg.paths.scores}/{cfg.dataset.name}_dynamic_uncertainty_{num_itr}"
         )
+        
+        if cfg.dataset.for_extrapolation.value is True:
+            output_path += f"_{cfg.dataset.for_extrapolation.subset_size}"
+        
+        output_path += ".json"
+
         with open(output_path, "w") as f:
             json.dump(dynamic_uncertainty, f)
 
+        logger.info(f"Saved dynamic uncertainty scores to {output_path}")
         # Pruning and evaluation
 
         if cfg.pruning.prune is True:

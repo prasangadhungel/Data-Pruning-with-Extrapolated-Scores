@@ -118,11 +118,12 @@ def main(cfg_path: str):
     cfg = cfg.SYNTHETIC_CIFAR100_1M
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Dataset: {cfg.dataset.name}, Device: {device}")
 
-    with open(cfg.dataset.original_scores_file) as f:
+    with open(cfg.scores.original_scores_file) as f:
         full_scores_dict = json.load(f)
 
-    with open(cfg.dataset.subset_scores_file) as f:
+    with open(cfg.scores.subset_scores_file) as f:
         subset_scores_dict = json.load(f)
 
     results = []
@@ -205,7 +206,7 @@ def main(cfg_path: str):
             )
 
             with open(
-                f"{cfg.output.knn_dict_path}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_{distance}.json",
+                f"{cfg.output.knn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_{distance}.json",
                 "w",
             ) as f:
                 json.dump(knn_dict, f)

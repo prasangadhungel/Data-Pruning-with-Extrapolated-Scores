@@ -45,7 +45,7 @@ SYNTHETIC_CIFAR100_1M:
     image_size: 32
     for_extrapolation:
       value: true
-      subset_size: 200000
+      subset_size: 10000
 
   model:
     name: "ResNet50"
@@ -70,7 +70,7 @@ SYNTHETIC_CIFAR100_1M:
     scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
     models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data"
 
-places365:
+PLACES_365:
   experiment:
     num_iterations: 1
 
@@ -79,8 +79,8 @@ places365:
     num_classes: 365
     image_size: 64
     for_extrapolation:
-      value: false
-      subset_size: 450000
+      value: true
+      subset_size: 360000
 
   model:
     name: "ResNet50"
@@ -102,5 +102,5 @@ places365:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data"

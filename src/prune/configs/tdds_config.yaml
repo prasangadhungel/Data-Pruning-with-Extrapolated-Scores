@@ -56,13 +56,15 @@ SYNTHETIC_CIFAR100_1M:
     batch_size: 256
     num_epochs: 50
     lr: 0.001
-    weight_decay: 0.001
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
 
   pruning:
     prune: false
     window: 10
     num_epochs: 50
-    trajectory: 50
+    trajectory: 10
     decay: 0.9
     percentages: [0.5, 0.2, 0.1]
 
@@ -83,7 +85,7 @@ PLACES_365:
     num_classes: 365
     image_size: 64
     for_extrapolation:
-      value: false
+      value: true
       subset_size: 450000
 
   model:
@@ -91,7 +93,7 @@ PLACES_365:
 
   training:
     batch_size: 128
-    num_epochs: 42
+    num_epochs: 35
     lr: 0.001
     momentum: 0.9
     weight_decay: 0.0005
@@ -100,7 +102,7 @@ PLACES_365:
   pruning:
     prune: false
     window: 10
-    num_epochs: 42
+    num_epochs: 35
     trajectory: 10
     decay: 0.9
     percentages: [0.2, 0.1]
@@ -109,5 +111,5 @@ PLACES_365:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data"
