@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import random
@@ -85,7 +86,7 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
 
     torch.save(model.state_dict(), model_name)
     # Save dynamic uncertainty scores
-    
+
     logger.info(f"Saved model to {model_name}")
 
     dynamic_uncertainty = {}
@@ -134,10 +135,12 @@ def main(cfg_path: str):
         output_path = (
             f"{cfg.paths.scores}/{cfg.dataset.name}_dynamic_uncertainty_{num_itr}"
         )
-        
+
         if cfg.dataset.for_extrapolation.value is True:
             output_path += f"_{cfg.dataset.for_extrapolation.subset_size}"
-        
+
+        date = datetime.datetime.now()
+        output_path += f"_{date.month}_{date.day}"
         output_path += ".json"
 
         with open(output_path, "w") as f:

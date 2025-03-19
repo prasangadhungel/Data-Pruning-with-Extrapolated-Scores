@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import random
@@ -256,13 +257,53 @@ def main(cfg_path: str):
         subset_scores_dict = json.load(f)
 
     logger.info(f"Number of samples in subset: {len(subset_scores_dict)}")
-    subset_scores_np = np.array([subset_scores_dict[str(i)] for i in range(len(full_scores_dict.keys())) if str(i) in subset_scores_dict])
-    full_scores_np = np.array([full_scores_dict[str(i)] for i in range(len(full_scores_dict.keys())) if str(i) in subset_scores_dict])
+    subset_scores_np = np.array(
+        [
+            subset_scores_dict[str(i)]
+            for i in range(len(full_scores_dict.keys()))
+            if str(i) in subset_scores_dict
+        ]
+    )
+    full_scores_np = np.array(
+        [
+            full_scores_dict[str(i)]
+            for i in range(len(full_scores_dict.keys()))
+            if str(i) in subset_scores_dict
+        ]
+    )
 
     corr = np.corrcoef(full_scores_np, subset_scores_np)[0, 1]
     spearman = spearmanr(full_scores_np, subset_scores_np).correlation
     mse = np.mean((full_scores_np - subset_scores_np) ** 2)
     logger.info(f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}")
+
+    if cfg.scores.normalize_scores:
+        # min-max normalization
+        logger.info("Normalizing scores with min-max normalization")
+        subset_scores_dict = {
+            key: (value - np.min(subset_scores_np))
+            / (np.max(subset_scores_np) - np.min(subset_scores_np))
+            for key, value in subset_scores_dict.items()
+        }
+        full_scores_dict = {
+            key: (value - np.min(full_scores_np))
+            / (np.max(full_scores_np) - np.min(full_scores_np))
+            for key, value in full_scores_dict.items()
+        }
+
+        subset_scores_np = (subset_scores_np - np.min(subset_scores_np)) / (
+            np.max(subset_scores_np) - np.min(subset_scores_np)
+        )
+        full_scores_np = (full_scores_np - np.min(full_scores_np)) / (
+            np.max(full_scores_np) - np.min(full_scores_np)
+        )
+
+        corr = np.corrcoef(full_scores_np, subset_scores_np)[0, 1]
+        spearman = spearmanr(full_scores_np, subset_scores_np).correlation
+        mse = np.mean((full_scores_np - subset_scores_np) ** 2)
+        logger.info(
+            f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}"
+        )
 
     labels_tensor = torch.zeros(num_samples, dtype=torch.int64, device=device)
     seed_samples = [int(key) for key in subset_scores_dict.keys()]
@@ -588,12 +629,18 @@ def main(cfg_path: str):
                 f"Final Extrapolated Corr: {corr_extrapolated} Spearman: {spearman_extrapolated}"
             )
 
+            filename = f"{cfg.output.gnn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_euclidean"
+
+            date = datetime.datetime.now()
+            filename += f"_{date.month}_{date.day}"
+
             with open(
                 f"{cfg.output.gnn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_euclidean.json",
                 "w",
             ) as f:
                 json.dump(saved_scores, f)
 
+            logger.info(f"Saved extrapolated scores to {filename}")
             wandb.finish()
 
 

@@ -8,6 +8,7 @@ CIFAR10:
     type: "DU"
     original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_tdds_0.json"
     subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_tdds_0.json"
+    normalize_scores: false
     
   models:
     names: ["resnet50-self-trained"]
@@ -29,7 +30,7 @@ CIFAR10:
 
   output:
     results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_cifar10.csv"
-    gnn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_
+    gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn"
 
   checkpoints:
     read_embeddings: true
@@ -55,7 +56,8 @@ SYNTHETIC_CIFAR100_1M:
     type: "tdds"
     original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_last_tdds_0.json"
     subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/SYNTHETIC_CIFAR100_1M_last_tdds_0_200000.json"
-    
+    normalize_scores: true
+
   models:
     names: ["resnet50-self-trained"]
     resnet50:
@@ -72,10 +74,10 @@ SYNTHETIC_CIFAR100_1M:
       hidden_layers: [512, 256, 128]
 
   wandb:
-    project: "GNN extrapolate SYNTHETIC CIFAR100 1M"
+    project: "GNN extrapolate TDDS SYNTHETIC"
 
   output:
-    gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_"
+    gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn"
     results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_SYNTHETIC_CIFAR100_1M.csv"
 
   checkpoints:
@@ -105,6 +107,7 @@ PLACES_365:
     type: "tdds"
     original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/PLACES_365_last_tdds_0.json"
     subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/PLACES_365_last_tdds_0.json"
+    normalize_scores: false
     
   models:
     names: ["resnet50-self-trained"]

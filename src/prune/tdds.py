@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import random
@@ -210,7 +211,7 @@ def main(cfg_path: str):
         model_name = f"{cfg.paths.models}/tdds"
         if cfg.dataset.for_extrapolation.value is True:
             model_name += f"_{cfg.dataset.for_extrapolation.subset_size}"
-        
+
         model_name += f".pth"
 
         torch.save(model.state_dict(), model_name)
@@ -243,7 +244,9 @@ def main(cfg_path: str):
 
         if cfg.dataset.for_extrapolation.value is True:
             output_path += f"_{cfg.dataset.for_extrapolation.subset_size}"
-        
+
+        date = datetime.datetime.now()
+        output_path += f"_{date.month}_{date.day}"
         output_path += ".json"
 
         with open(output_path, "w") as f:

@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import random
@@ -60,12 +61,14 @@ def main(cfg_path: str):
             for i, embedding in enumerate(embeddings)
         }
 
+        date = datetime.datetime.now()
+
         # Save distances as JSON
-        output_path = (
-            f"{cfg.paths.scores}/{cfg.dataset.name}_embedding_distances_{num_itr}.json"
-        )
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_embedding_distances_{num_itr}_{date.month}_{date.day}.json"
         with open(output_path, "w") as f:
             json.dump(distances, f)
+
+        logger.info(f"Saved embedding distances to {output_path}")
 
         # Perform pruning and retraining for each prune percentage
         prune(

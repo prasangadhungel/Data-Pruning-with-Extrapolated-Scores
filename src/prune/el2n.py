@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import os
@@ -78,9 +79,12 @@ def main(cfg_path: str):
         training_time = end_time - start_time
         logger.info(f"Training time: {training_time:.2f} seconds")
 
-        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_el2n_score_{num_itr}.json"
+        date = datetime.datetime.now()
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_el2n_score_{num_itr}_{date.month}_{date.day}.json"
         with open(output_path, "w") as f:
             json.dump(el2n_values, f)
+
+        logger.info(f"Saved EL2N scores to {output_path}")
 
         prune(
             trainset=trainset,

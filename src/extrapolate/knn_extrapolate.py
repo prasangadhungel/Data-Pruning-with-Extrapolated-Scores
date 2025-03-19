@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import sys
@@ -103,14 +104,25 @@ def get_correlation(
     logger.info(f"Average Correlation: {corr_avg}, Spearman: {spearman_avg}")
     logger.info(f"Weighted Correlation: {corr_weighted}, Spearman: {spearman_weighted}")
 
-    knn_dict_created = {}
+    knn_dict_weighted = {}
+    knn_dict_avg = {}
+
     for i, sample_id in enumerate(unseeded_samples):
-        knn_dict_created[str(sample_id)] = float(knn_weighted_scores_np[i])
+        knn_dict_weighted[str(sample_id)] = float(knn_weighted_scores_np[i])
+        knn_dict_avg[str(sample_id)] = float(knn_avg_scores_np[i])
 
     for sample_id in seed_samples:
-        knn_dict_created[str(sample_id)] = float(full_scores_dict[str(sample_id)])
+        knn_dict_weighted[str(sample_id)] = float(full_scores_dict[str(sample_id)])
+        knn_dict_avg[str(sample_id)] = float(full_scores_dict[str(sample_id)])
 
-    return corr_avg, corr_weighted, spearman_avg, spearman_weighted, knn_dict_created
+    return (
+        corr_avg,
+        corr_weighted,
+        spearman_avg,
+        spearman_weighted,
+        knn_dict_weighted,
+        knn_dict_avg,
+    )
 
 
 def main(cfg_path: str):
@@ -125,6 +137,62 @@ def main(cfg_path: str):
 
     with open(cfg.scores.subset_scores_file) as f:
         subset_scores_dict = json.load(f)
+
+    logger.info(f"Number of samples in subset: {len(subset_scores_dict)}")
+    subset_scores_np = np.array(
+        [
+            subset_scores_dict[str(i)]
+            for i in range(len(full_scores_dict.keys()))
+            if str(i) in subset_scores_dict
+        ]
+    )
+    full_scores_np = np.array(
+        [
+            full_scores_dict[str(i)]
+            for i in range(len(full_scores_dict.keys()))
+            if str(i) in subset_scores_dict
+        ]
+    )
+
+    # check if the scores contain NaNs
+    if np.isnan(subset_scores_np).any():
+        logger.error("Subset scores contain NaNs")
+
+    if np.isnan(full_scores_np).any():
+        logger.error("Full scores contain NaNs")
+
+    corr = np.corrcoef(full_scores_np, subset_scores_np)[0, 1]
+    spearman = spearmanr(full_scores_np, subset_scores_np).correlation
+    mse = np.mean((full_scores_np - subset_scores_np) ** 2)
+    logger.info(f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}")
+
+    if cfg.scores.normalize_scores:
+        # min-max normalization
+        logger.info("Normalizing scores with min-max normalization")
+        subset_scores_dict = {
+            key: (value - np.min(subset_scores_np))
+            / (np.max(subset_scores_np) - np.min(subset_scores_np))
+            for key, value in subset_scores_dict.items()
+        }
+        full_scores_dict = {
+            key: (value - np.min(full_scores_np))
+            / (np.max(full_scores_np) - np.min(full_scores_np))
+            for key, value in full_scores_dict.items()
+        }
+
+        subset_scores_np = (subset_scores_np - np.min(subset_scores_np)) / (
+            np.max(subset_scores_np) - np.min(subset_scores_np)
+        )
+        full_scores_np = (full_scores_np - np.min(full_scores_np)) / (
+            np.max(full_scores_np) - np.min(full_scores_np)
+        )
+
+        corr = np.corrcoef(full_scores_np, subset_scores_np)[0, 1]
+        spearman = spearmanr(full_scores_np, subset_scores_np).correlation
+        mse = np.mean((full_scores_np - subset_scores_np) ** 2)
+        logger.info(
+            f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}"
+        )
 
     results = []
 
@@ -181,7 +249,8 @@ def main(cfg_path: str):
                 corr_weighted,
                 spearman_avg,
                 spearman_weighted,
-                knn_dict,
+                knn_dict_weighted,
+                knn_dict_avg,
             ) = get_correlation(
                 embeddings,
                 subset_scores_dict,
@@ -205,11 +274,21 @@ def main(cfg_path: str):
                 f"k: {k}, num_seed: {num_seed}, distance_metric: {distance}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}",
             )
 
-            with open(
-                f"{cfg.output.knn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_{distance}.json",
-                "w",
-            ) as f:
-                json.dump(knn_dict, f)
+            date = datetime.datetime.now()
+            curr_datetime = f"_{date.month}_{date.day}"
+
+            filename_weighted = f"{cfg.output.knn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_weighted_{model_name}_k_{k}_seed_{num_seed}_{distance}_{curr_datetime}.json"
+            filename_avg = f"{cfg.output.knn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_avg_{model_name}_k_{k}_seed_{num_seed}_{distance}_{curr_datetime}.json"
+
+            with open(filename_weighted, "w") as f:
+                json.dump(knn_dict_weighted, f)
+
+            logger.info(f"Saved weighted scores to {filename_weighted}")
+
+            with open(filename_avg, "w") as f:
+                json.dump(knn_dict_avg, f)
+
+            logger.info(f"Saved average scores to {filename_avg}")
 
     results = pd.DataFrame(
         {

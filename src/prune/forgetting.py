@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import random
@@ -87,11 +88,12 @@ def main(cfg_path: str):
             i: forget_stats.num_forgets[i] for i in range(num_train_examples)
         }
 
-        output_path = (
-            f"{cfg.paths.scores}/{cfg.dataset.name}_forget_score_{num_itr}.json"
-        )
+        date = datetime.datetime.now()
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_forget_score_{num_itr}_{date.month}_{date.day}.json"
         with open(output_path, "w") as f:
             json.dump(forget_stats_dict, f)
+
+        logger.info(f"Saved forget scores to {output_path}")
 
         prune(
             trainset=trainset,

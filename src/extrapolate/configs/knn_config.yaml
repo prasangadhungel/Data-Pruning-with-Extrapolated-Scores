@@ -8,6 +8,7 @@ CIFAR10:
     type: "tdds"
     original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_tdds_0.json"
     subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_tdds_0.json"
+    normalize_scores: false
     
   models:
     names: ["resnet50-self-trained"]
@@ -19,8 +20,8 @@ CIFAR10:
     distance: "euclidean"
 
   output:
-    results_path: /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_CIFAR10.csv
-    knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_
+    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_CIFAR10.csv"
+    knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
     read_embeddings: false
@@ -34,22 +35,23 @@ SYNTHETIC_CIFAR100_1M:
     image_size: 32
 
   scores:
-    type: "DU"
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0_10000.json"
+    type: "tdds"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_last_tdds_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/SYNTHETIC_CIFAR100_1M_last_tdds_0_200000.json"
+    normalize_scores: false
 
   models:
     names: ["resnet50-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data/dynamic_uncertainty_10000.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data/tdds_200000.pth"
 
   hyperparams:
     k_values: [50]
     distance: "euclidean"
 
   output:
-    results_path: /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_SYNTHETIC_CIFAR100_1M.csv
-    knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_
+    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_SYNTHETIC_CIFAR100_1M.csv"
+    knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
     read_embeddings: false
@@ -67,6 +69,7 @@ PLACES_365:
     type: "DU"
     original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/PLACES_365_dynamic_uncertainty_0.json"
     subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/PLACES_365_dynamic_uncertainty_0_180000.json"
+    normalize_scores: false
     
   models:
     names: ["resnet50-self-trained"]
@@ -78,8 +81,8 @@ PLACES_365:
     distance: "euclidean"
 
   output:
-    results_path: /nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_places_365_new.csv
-    knn_dict_path: /nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_
+    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_places_365_new.csv"
+    knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
     read_embeddings: false
