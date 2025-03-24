@@ -354,7 +354,7 @@ def run_turtle(Zs_train, Zs_val, y_gt_val, args=None):
     
     uncertainty_scores = compute_dynamic_uncertainty(softmax_pseudo_labels)
 
-    output_path = f"/nfs/homedirs/dhp/unsupervised-data-pruning/scores/{args.dataset}_unsupervised_dynamic_uncertainty"
+    output_path = f"/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/{args.dataset}_unsupervised_dynamic_uncertainty"
     date = datetime.datetime.now()
     output_path += f"_{date.month}_{date.day}"
     output_path += ".json"
