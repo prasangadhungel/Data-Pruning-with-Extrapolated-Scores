@@ -1,0 +1,46 @@
+CIFAR10:
+  experiment:
+    num_iterations: 5
+
+  dataset:
+    name: "CIFAR10"
+    root_dir: "data"
+    num_classes: 10
+    image_size: 32
+    num_samples: 50000
+    for_extrapolation:
+      value: false
+      subset_size: 20000
+
+  model:
+    name: "dinov2"
+    path: "/nfs/homedirs/dhp/turtle/data/checkpoints/dinov2"
+    torch_hub: "facebookresearch/dinov2"
+    version: "dinov2_vitg14"
+
+  pruning:
+    prune: true
+    percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
+
+  training:
+    seed: 42
+    batch_size: 10000
+    batch_size_repr: 256
+    gamma: 10.0
+    T: 6000
+    inner_lr: 0.001
+    outer_lr: 0.001
+    warm_start: false
+    M: 10
+    num_epochs: 400
+    lr: 0.001
+    weight_decay: 0.001
+
+  uncertainty:
+    window: 10
+
+  paths:
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    softmax_dir: "/nfs/homedirs/dhp/unsupervised-data-pruning/checkpoints/CIFAR10/subset_data"
+    save_softmax: false
+    read_softmax: false

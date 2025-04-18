@@ -25,7 +25,7 @@ logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
-def generate(probs, losses, indexes, cfg):
+def generate(probs, indexes, cfg):
     # Initialize variables
     k = 0
     window_size = cfg.pruning.window
@@ -95,7 +95,7 @@ def main(cfg_path: str):
 
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.SYNTHETIC_CIFAR100_1M
+    cfg = cfg.PLACES_365
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
@@ -141,29 +141,17 @@ def main(cfg_path: str):
             nesterov=cfg.training.nesterov,
         )
 
-        criterion = torch.nn.CrossEntropyLoss()
-        model.cuda()
-        criterion.cuda()
-
-        output_epochs, loss_epochs, index_epochs = [], [], []
+        torch.cuda.empty_cache()
+        output_epochs, index_epochs = [], []
         for epoch in range(cfg.training.num_epochs):
             train_losses = []
 
             for batch_idx, (data, target, sample_idx) in enumerate(train_loader):
                 data, target = data.to(device), target.to(device)
-                input_var = torch.autograd.Variable(data)
-                target_var = torch.autograd.Variable(target)
-                output = model(input_var)
-                loss = criterion(output, target_var)
+                output = model(data)
+                # loss = criterion(output, target_var)
 
-                # loss = torch.nn.functional.cross_entropy(output, target)
-
-                loss_batch = (
-                    torch.nn.functional.cross_entropy(output, target_var, reduce=False)
-                    .detach()
-                    .cpu()
-                )
-
+                loss = torch.nn.functional.cross_entropy(output, target)
                 index_batch = sample_idx
 
                 # use the mapped indices if the dataset is for extrapolation
@@ -171,13 +159,9 @@ def main(cfg_path: str):
                     index_batch = [mapping[idx.item()] for idx in index_batch]
 
                 if batch_idx == 0:
-                    loss_epoch = np.array(loss_batch)
                     output_epoch = np.array(output.detach().cpu())
                     index_epoch = np.array(index_batch)
                 else:
-                    loss_epoch = np.concatenate(
-                        (loss_epoch, np.array(loss_batch)), axis=0
-                    )
                     output_epoch = np.concatenate(
                         (output_epoch, np.array(output.detach().cpu())), axis=0
                     )
@@ -199,7 +183,6 @@ def main(cfg_path: str):
                     )
 
             output_epochs.append(output_epoch)
-            loss_epochs.append(loss_epoch)
             index_epochs.append(index_epoch)
 
             test_acc = evaluate(model, test_loader, device)
@@ -223,17 +206,13 @@ def main(cfg_path: str):
         # instead take the last trajectory epochs
         output_epochs = np.array(output_epochs[-cfg.pruning.trajectory :])
 
-        # loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
-        loss_epochs = np.array(loss_epochs[-cfg.pruning.trajectory :])
-
         # index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
         index_epochs = np.array(index_epochs[-cfg.pruning.trajectory :])
 
         logger.info(f"Shape of output_epochs: {output_epochs.shape}")
-        logger.info(f"Shape of loss_epochs: {loss_epochs.shape}")
         logger.info(f"Shape of index_epochs: {index_epochs.shape}")
 
-        tdds_score = generate(output_epochs, loss_epochs, index_epochs, cfg)
+        tdds_score = generate(output_epochs, index_epochs, cfg)
 
         if cfg.dataset.for_extrapolation.value is True:
             tdds_score = {
