@@ -5,7 +5,6 @@ import random
 import sys
 import time
 
-import numpy as np
 import torch
 from loguru import logger
 from omegaconf import OmegaConf
@@ -13,7 +12,7 @@ from torch.optim import Adam
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
@@ -101,10 +100,7 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
 
 
 def main(cfg_path: str):
-    random.seed(43)
-    np.random.seed(43)
-    torch.manual_seed(43)
-    torch.cuda.manual_seed(43)
+    seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
     cfg = cfg.SYNTHETIC_CIFAR100_1M

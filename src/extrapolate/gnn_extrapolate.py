@@ -18,7 +18,7 @@ from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.models import load_model_by_name
 
@@ -238,13 +238,10 @@ def evaluate(
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.SYNTHETIC_CIFAR100_1M
+    cfg = cfg.CIFAR10
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, train_loader, _, num_samples = prepare_data(cfg.dataset, 1024)

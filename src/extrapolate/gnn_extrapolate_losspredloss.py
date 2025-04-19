@@ -7,7 +7,6 @@ import sys
 import numpy as np
 import torch
 import torch.nn as nn
-
 import torch.nn.functional as F
 from loguru import logger
 from omegaconf import OmegaConf
@@ -17,33 +16,39 @@ from torch_geometric.loader import NeighborLoader
 from torch_geometric.nn import GCNConv, knn_graph
 from tqdm import tqdm
 
-sys.path.append("/nfs/homedirs/dhp/unsupervised-data-pruning/src")
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.models import load_model_by_name
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
-def LossPredLoss(input, target, margin=1.0, reduction='mean'):
-    assert len(input) % 2 == 0, 'the batch size is not even.'
+
+def LossPredLoss(input, target, margin=1.0, reduction="mean"):
+    assert len(input) % 2 == 0, "the batch size is not even."
     assert input.shape == input.flip(0).shape
     criterion = nn.BCELoss()
-    input = (input - input.flip(0))[:len(input)//2] # [l_1 - l_2B, l_2 - l_2B-1, ... , l_B - l_B+1], where batch_size = 2B
-    target = (target - target.flip(0))[:len(target)//2]
+    input = (input - input.flip(0))[
+        : len(input) // 2
+    ]  # [l_1 - l_2B, l_2 - l_2B-1, ... , l_B - l_B+1], where batch_size = 2B
+    target = (target - target.flip(0))[: len(target) // 2]
     target = target.detach()
     diff = torch.sigmoid(input)
-    one = torch.sign(torch.clamp(target, min=0)) # 1 operation which is defined by the authors
-    
-    if reduction == 'mean':
-        loss = criterion(diff,one)
-    elif reduction == 'none':
-        loss = criterion(diff,one)
+    one = torch.sign(
+        torch.clamp(target, min=0)
+    )  # 1 operation which is defined by the authors
+
+    if reduction == "mean":
+        loss = criterion(diff, one)
+    elif reduction == "none":
+        loss = criterion(diff, one)
     else:
         NotImplementedError()
-    
+
     return loss
+
 
 class GNN(torch.nn.Module):
     def __init__(self, input_dim, output_dim, dropout=0.5):
@@ -257,10 +262,7 @@ def evaluate(
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     logger.info("Experimenting with LossPredLoss")
 

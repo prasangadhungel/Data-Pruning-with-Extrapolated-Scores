@@ -1,4 +1,3 @@
-import argparse
 import datetime
 import json
 import os
@@ -20,7 +19,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from loguru import logger
 from torchvision.datasets import Places365
 
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
@@ -164,14 +163,6 @@ def get_dataloader_from_trainset(trainset, batch_size, shuffle=False):
     return DataLoader(trainset, batch_size=batch_size, shuffle=shuffle, num_workers=10)
 
 
-def seed_everything(seed):
-    torch.manual_seed(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
 def get_features(dataloader, model, device):
     features_dict = {}
     with torch.no_grad():
@@ -286,7 +277,6 @@ def run_turtle(
     save_scores=True,
 ):
     logger.info("Running TURTLE with dynamic uncertainty")
-    preprocess = None
 
     # trainloader, _ = get_dataloaders(args.dataset, preprocess, 10000, "data")
     transform = get_default_transforms()
@@ -387,7 +377,7 @@ def run_turtle(
                 ]
             )
             entr_reg = sum(
-                [torch.special.entr(l.mean(0)).sum() for l in label_per_space]
+                [torch.special.entr(label_in_space.mean(0)).sum() for label_in_space in label_per_space]
             )
             (pred_error - args.training.gamma * entr_reg).backward()
             optimizer.step()
@@ -407,7 +397,7 @@ def run_turtle(
             f"Epoch {epoch}/{epochs} Training loss {float(pred_error):.3f}, entropy {float(entr_reg):.3f}, cluster acc {cluster_acc:.4f}"
         )
 
-    logger.info(f"Training finished!")
+    logger.info("Training finished!")
 
     if compute_score:
         labels, _ = task_encoding(
@@ -429,9 +419,7 @@ def run_turtle(
         )
 
         if save_scores:
-            output_path = (
-                f"{args.paths.scores}/{args.dataset.name}_unsupervised_dynamic_uncertainty"
-            )
+            output_path = f"{args.paths.scores}/{args.dataset.name}_unsupervised_dynamic_uncertainty"
             date = datetime.datetime.now()
             output_path += f"_{date.month}_{date.day}"
             output_path += ".json"
@@ -458,10 +446,12 @@ def main(cfg_path: str):
     for itr in range(args.experiment.num_iterations):
         logger.info("####" * 20)
         logger.info(f"Iteration {itr + 1}/{args.experiment.num_iterations}")
-        
+
         if args.dataset.for_extrapolation.value:
             logger.info("For extrapolation")
-            indices_to_keep = random.sample(range(num_samples), args.dataset.for_extrapolation.subset_size)
+            indices_to_keep = random.sample(
+                range(num_samples), args.dataset.for_extrapolation.subset_size
+            )
             logger.info(f"Num samples to keep: {len(indices_to_keep)}")
             run_turtle(
                 [Zs_train],
@@ -483,7 +473,7 @@ def main(cfg_path: str):
                 args=args,
                 device=device,
                 compute_score=False,
-                save_scores=False
+                save_scores=False,
             )
 
             if args.pruning.prune:
@@ -492,7 +482,9 @@ def main(cfg_path: str):
                     frac_to_keep = 1 - prune_percentage
                     logger.info(f"Num samples: {num_samples}")
                     num_samples_to_keep = int(num_samples * frac_to_keep)
-                    indices_to_keep = random.sample(range(num_samples), num_samples_to_keep)
+                    indices_to_keep = random.sample(
+                        range(num_samples), num_samples_to_keep
+                    )
                     logger.info(f"Num samples to keep: {len(indices_to_keep)}")
                     logger.info(f"First 10 indices to keep: {indices_to_keep[:10]}")
 

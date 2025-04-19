@@ -11,11 +11,10 @@ from loguru import logger
 from numpy import linalg as LA
 from omegaconf import OmegaConf
 from scipy.special import softmax
-from torch.optim import Adam
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
@@ -88,10 +87,7 @@ def generate(probs, indexes, cfg):
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
@@ -195,7 +191,7 @@ def main(cfg_path: str):
         if cfg.dataset.for_extrapolation.value is True:
             model_name += f"_{cfg.dataset.for_extrapolation.subset_size}"
 
-        model_name += f".pth"
+        model_name += ".pth"
 
         torch.save(model.state_dict(), model_name)
 

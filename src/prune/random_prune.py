@@ -3,7 +3,6 @@ import random
 import sys
 import time
 
-import numpy as np
 import torch
 import torch.optim as optim
 from loguru import logger
@@ -12,7 +11,7 @@ from omegaconf import OmegaConf
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
@@ -22,10 +21,7 @@ logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
     cfg = cfg.IMAGENET
@@ -34,7 +30,9 @@ def main(cfg_path: str):
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
     )
-    logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}, Num_samples: {num_samples}")
+    logger.info(
+        f"Loaded dataset: {cfg.dataset.name}, Device: {device}, Num_samples: {num_samples}"
+    )
 
     for num_itr in range(cfg.experiment.num_iterations):
         for prune_percentage in cfg.pruning.percentages:
@@ -68,33 +66,17 @@ def main(cfg_path: str):
                 image_size=cfg.dataset.image_size,
             ).to(device)
 
-            if cfg.training.optimizer == "SGD":
-                optimizer = torch.optim.SGD(
-                    model.parameters(),
-                    lr=cfg.training.base_lr,
-                    momentum=cfg.training.momentum,
-                    weight_decay=cfg.training.weight_decay,
-                    nesterov=cfg.training.nesterov,
-                )
-
-                scheduler = optim.lr_scheduler.MultiStepLR(
-                    optimizer,
-                    milestones=cfg.scheduler.milestones,
-                    gamma=cfg.scheduler.lr_decay
-                )
-
-            else:
-                optimizer = optim.Adam(
-                    model.parameters(),
-                    lr=cfg.training.lr,
-                    weight_decay=cfg.training.weight_decay,
-                )
-                scheduler = optim.lr_scheduler.OneCycleLR(
-                    optimizer,
-                    max_lr=cfg.training.lr,
-                    epochs=cfg.training.num_epochs,
-                    steps_per_epoch=len(train_loader),
-                )
+            optimizer = optim.Adam(
+                model.parameters(),
+                lr=cfg.training.lr,
+                weight_decay=cfg.training.weight_decay,
+            )
+            scheduler = optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=cfg.training.lr,
+                epochs=cfg.training.num_epochs,
+                steps_per_epoch=len(train_loader),
+            )
 
             torch.cuda.empty_cache()
             start_time = time.time()

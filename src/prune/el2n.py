@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 import os
-import random
+import sys
 import time
 
 import numpy as np
@@ -10,7 +10,9 @@ import torch
 from omegaconf import OmegaConf
 from torch.optim import Adam
 
-from utils.argparse import parse_config
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
@@ -20,10 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -87,9 +87,7 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
     """
     sorted_importance_scores = {
         k: v
-        for k, v in sorted(
-            scores_dict.items(), key=lambda item: item[1], reverse=True
-        )
+        for k, v in sorted(scores_dict.items(), key=lambda item: item[1], reverse=True)
     }
 
     for prune_percentage in cfg.pruning.percentages:
@@ -101,7 +99,7 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
         wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
 
         # sort the uncertainty scores in descending order and get the indices of most uncertain samples
-        
+
         top_samples = list(sorted_importance_scores.keys())[
             : int((1 - prune_percentage) * len(sorted_importance_scores))
         ]

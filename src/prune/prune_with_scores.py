@@ -1,16 +1,14 @@
 import json
 import os
-import random
 import sys
 
-import numpy as np
 import torch
 from loguru import logger
 from omegaconf import OmegaConf
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.prune_utils import prune
 
@@ -19,10 +17,7 @@ logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
     cfg = cfg.SYNTHETIC_CIFAR100_1M

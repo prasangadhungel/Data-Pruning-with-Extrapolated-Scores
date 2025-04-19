@@ -379,6 +379,7 @@ def ResNet18_32(num_classes=10):
 def ResNet50_32(num_classes=10):
     return ResNet_32(Bottleneck_32, [3, 4, 6, 3], num_classes=num_classes)
 
+
 class ResNet_64(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10):
         super(ResNet_64, self).__init__()
@@ -412,8 +413,10 @@ class ResNet_64(nn.Module):
         out = self.linear(out)
         return out
 
+
 def ResNet18_64(num_classes=10):
     return ResNet_64(BasicBlock_32, [2, 2, 2, 2], num_classes=num_classes)
+
 
 def ResNet50_64(num_classes=10):
     return ResNet_64(Bottleneck_32, [3, 4, 6, 3], num_classes=num_classes)

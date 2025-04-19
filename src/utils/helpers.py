@@ -1,4 +1,8 @@
 import argparse
+import random
+
+import numpy as np
+import torch
 
 
 def parse_config(default_config: str, description: str = "Run script with config"):
@@ -21,3 +25,11 @@ def parse_config(default_config: str, description: str = "Run script with config
     )
     args = parser.parse_args()
     return args.config_path
+
+
+def seed_everything(seed):
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False

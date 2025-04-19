@@ -1,6 +1,5 @@
 import inspect
 import os
-from PIL import Image
 
 import numpy as np
 import torchvision.transforms as transforms
@@ -91,7 +90,6 @@ class CustomDatasetWithIndices(Dataset):
         self.indices = indices
         self.transform = transform
         self.reshape = reshape
-
 
     def __len__(self):
         return len(self.labels)
@@ -293,7 +291,7 @@ def get_dataset(dataset_name: str):
             train_images, train_labels, indices, transform=transform_train
         )
         testset = None
-    
+
     elif dataset_name == "IMAGENET":
         mean_imagenet = (0.449, 0.426, 0.379)
         std_imagenet = (0.285, 0.276, 0.284)
@@ -302,14 +300,14 @@ def get_dataset(dataset_name: str):
         train_file_list = [f"train_data_batch_{i}.npz" for i in range(1, 11)]
 
         train_data = []
-        train_labels = []   
+        train_labels = []
 
         for file_name in train_file_list:
             file_path = os.path.join(root_dir, file_name)
             with np.load(file_path) as data_file:
-                train_data.append(data_file['data'])
-                train_labels.append(data_file['labels'])
-        
+                train_data.append(data_file["data"])
+                train_labels.append(data_file["labels"])
+
         train_data = np.concatenate(train_data, axis=0)
         train_labels = np.concatenate(train_labels, axis=0)
         train_labels = train_labels - 1
@@ -322,20 +320,19 @@ def get_dataset(dataset_name: str):
         val_labels = []
 
         with np.load(os.path.join(root_dir, val_file)) as data_file:
-            val_data.append(data_file['data'])
-            val_labels.append(data_file['labels'])
-        
+            val_data.append(data_file["data"])
+            val_labels.append(data_file["labels"])
+
         val_data = np.concatenate(val_data, axis=0)
         val_labels = np.concatenate(val_labels, axis=0)
+        val_labels = val_labels - 1
         transform_train, transform_test = get_transforms(
             mean_imagenet, std_imagenet, from_numpy=True, dataset_name="IMAGENET"
         )
         trainset = CustomDatasetWithIndices(
             train_data, train_labels, indices, transform=transform_train, reshape=True
         )
-        testset = CustomDataset(
-            val_data, val_labels, transform_test, reshape=True
-        )
+        testset = CustomDataset(val_data, val_labels, transform_test, reshape=True)
 
     return trainset, testset
 

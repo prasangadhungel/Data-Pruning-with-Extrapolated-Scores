@@ -7,21 +7,21 @@ import sys
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torchvision.datasets as dsets
+import torchvision.transforms as transforms
 from loguru import logger
 from omegaconf import OmegaConf
 from scipy.stats import spearmanr
+from torch.utils.data import DataLoader, Dataset
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 from torch_geometric.nn import GCNConv, knn_graph
 from tqdm import tqdm
-from torch.utils.data import DataLoader, Dataset
-import torchvision.datasets as dsets
-import torchvision.transforms as transforms
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from torchvision.datasets import Places365
 
-from utils.argparse import parse_config
+from src.utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 
 logger.remove()
@@ -166,14 +166,6 @@ def get_dataloader_from_trainset(trainset, batch_size, shuffle=False):
     return DataLoader(trainset, batch_size=batch_size, shuffle=shuffle, num_workers=10)
 
 
-def seed_everything(seed):
-    torch.manual_seed(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
 def get_features(dataloader, model, device):
     features_dict = {}
     with torch.no_grad():
@@ -199,13 +191,15 @@ def run_representation(args, device="cuda"):
     preprocess = None
 
     trainloader, valloader = get_dataloaders(
-        args.dataset.name, preprocess, args.training.batch_size_repr, args.dataset.root_dir
+        args.dataset.name,
+        preprocess,
+        args.training.batch_size_repr,
+        args.dataset.root_dir,
     )
     feats_train = get_features(trainloader, model, device)
     feats_val = get_features(valloader, model, device)
 
     return feats_train, feats_val
-
 
 
 class GNN(torch.nn.Module):
@@ -420,10 +414,7 @@ def evaluate(
 
 
 def main(cfg_path: str):
-    random.seed(42)
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
     cfg = cfg.CIFAR10
@@ -510,11 +501,14 @@ def main(cfg_path: str):
             model = torch.hub.load(cfg.models.torch_hub, cfg.models.version).to(device)
             model.eval()
             preprocess = None
-            
+
             trainloader, _ = get_dataloaders(
-                cfg.dataset.name, preprocess, cfg.training.batch_size_repr, cfg.dataset.root_dir
+                cfg.dataset.name,
+                preprocess,
+                cfg.training.batch_size_repr,
+                cfg.dataset.root_dir,
             )
-            
+
             embeddings = get_features(trainloader, model, device)
 
             if cfg.checkpoints.save_embeddings:
