@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.helpers import parse_config, seed_everything
+from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.prune_utils import prune
 
@@ -20,7 +20,7 @@ def main(cfg_path: str):
     seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.SYNTHETIC_CIFAR100_1M
+    cfg = cfg.IMAGENET
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, _, test_loader, _ = prepare_data(cfg.dataset, cfg.training.batch_size)
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")

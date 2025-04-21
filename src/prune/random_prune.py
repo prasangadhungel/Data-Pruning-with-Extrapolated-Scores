@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from src.utils.helpers import parse_config, seed_everything
+from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
@@ -40,6 +40,13 @@ def main(cfg_path: str):
             if prune_percentage == 0:
                 logger.info("Unpruned Training")
                 wandb_name = "unpruned-"
+            if num_itr > 0:
+                train_loader = torch.utils.data.DataLoader(
+                    trainset,
+                    batch_size=cfg.training.batch_size,
+                    shuffle=True,
+                    num_workers=2,
+                )
             else:
                 wandb_name = f"random-prune-{str_prune_percentage}"
                 frac_to_keep = 1 - prune_percentage

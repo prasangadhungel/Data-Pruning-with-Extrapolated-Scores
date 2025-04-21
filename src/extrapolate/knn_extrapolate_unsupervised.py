@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.helpers import parse_config
+from utils.helpers import parse_config
 from utils.dataset import prepare_data
 from utils.models import load_model_by_name
 

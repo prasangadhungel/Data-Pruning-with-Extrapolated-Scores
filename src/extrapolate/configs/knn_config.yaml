@@ -20,7 +20,6 @@ CIFAR10:
     distance: "euclidean"
 
   output:
-    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_CIFAR10.csv"
     knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
@@ -50,7 +49,6 @@ SYNTHETIC_CIFAR100_1M:
     distance: "euclidean"
 
   output:
-    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_SYNTHETIC_CIFAR100_1M.csv"
     knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
@@ -81,10 +79,38 @@ PLACES_365:
     distance: "euclidean"
 
   output:
-    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/knn_extrapolation_places_365_new.csv"
     knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
     read_embeddings: false
     save_embeddings: false
     embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/places365/embeddings_dict.pth"
+
+IMAGENET:
+  dataset:
+    name: "IMAGENET"
+    num_classes: 1000
+    image_size: 64
+
+  scores:
+    type: "du"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_128117_4_19.json"
+    normalize_scores: false
+    
+  models:
+    names: ["resnet18-self-trained"]
+    resnet50:
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/imagenet/subset_data/dynamic_uncertainty_128117.pth"
+
+  hyperparams:
+    k_values: [10, 20, 50]
+    distance: "euclidean"
+
+  output:
+    knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_"
+
+  checkpoints:
+    read_embeddings: false
+    save_embeddings: false
+    embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/imagenet/embeddings_dict.pth"

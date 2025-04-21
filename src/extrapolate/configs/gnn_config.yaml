@@ -6,16 +6,17 @@ CIFAR10:
 
   scores:
     type: "DU"
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_tdds_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_tdds_0.json"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
     normalize_scores: false
     
   models:
     names: ["resnet50-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/dynamic_uncertainty_180000.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data/dynamic_uncertainty.pth"
 
   hyperparams:
+    use_labels: true
     k_values: [10]
     distance: "euclidean"
     lr: 0.001
@@ -29,20 +30,19 @@ CIFAR10:
     project: "GNN extrapolate"
 
   output:
-    results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_cifar10.csv"
     gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn"
 
   checkpoints:
-    read_embeddings: true
+    read_embeddings: false
     save_embeddings: false
     embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/CIFAR10/embeddings_dict.pth"
     read_labels: false
-    save_labels: true
+    save_labels: false
     labels_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/labels/CIFAR10/"
-    read_knn: true
+    read_knn: false
     save_knn: false
     knn_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/CIFAR10/"
-    read_edge_attr: true
+    read_edge_attr: false
     save_edge_attr: false
     edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/CIFAR10/"
 
@@ -53,17 +53,18 @@ SYNTHETIC_CIFAR100_1M:
     image_size: 32
   
   scores:
-    type: "tdds"
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_last_tdds_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/SYNTHETIC_CIFAR100_1M_last_tdds_0_200000.json"
-    normalize_scores: true
+    type: "du"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0.json"
+    normalize_scores: false
 
   models:
     names: ["resnet50-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data/tdds_200000.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data/dynamic_uncertainty.pth"
 
   hyperparams:
+    use_labels: true
     k_values: [10, 20, 50]
     distance: "euclidean"
     lr: 0.001
@@ -78,7 +79,6 @@ SYNTHETIC_CIFAR100_1M:
 
   output:
     gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn"
-    results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_SYNTHETIC_CIFAR100_1M.csv"
 
   checkpoints:
     read_embeddings: false
@@ -100,21 +100,20 @@ PLACES_365:
     name: "PLACES_365"
     num_classes: 365
     image_size: 64
-    partial: false
-    subset_idxs: ["train"]
 
   scores:
-    type: "tdds"
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/PLACES_365_last_tdds_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/PLACES_365_last_tdds_0.json"
+    type: "du"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/PLACES_365_dynamic_uncertainty_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/PLACES_365_dynamic_uncertainty_0.json"
     normalize_scores: false
     
   models:
     names: ["resnet50-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/tdds.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data/dynamic_uncertainty.pth"
 
   hyperparams:
+    use_labels: true
     k_values: [10, 20, 50]
     distance: "euclidean"
     lr: 0.001
@@ -129,7 +128,6 @@ PLACES_365:
 
   output:
     gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_"
-    results_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_places365.csv"
 
   checkpoints:
     read_embeddings: false
@@ -144,3 +142,52 @@ PLACES_365:
     read_edge_attr: false
     save_edge_attr: false
     edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/places365/"
+
+
+IMAGENET:
+  dataset:
+    name: "IMAGENET"
+    num_classes: 1000
+    image_size: 64
+
+  scores:
+    type: "du"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_256234_4_19.json"
+    normalize_scores: false
+    
+  models:
+    names: ["resnet18-self-trained"]
+    resnet50:
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/imagenet/subset_data/dynamic_uncertainty_256234.pth"
+
+  hyperparams:
+    use_labels: true
+    k_values: [10, 20, 50]
+    distance: "euclidean"
+    lr: 0.001
+    batch_size: 128
+    epochs: 50
+    gnn:
+      type: "gcn"  # Options: "gcn", "gat"
+      hidden_layers: [512, 256, 128]
+
+  wandb:
+    project: "GNN extrapolate"
+
+  output:
+    gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_"
+
+  checkpoints:
+    read_embeddings: false
+    save_embeddings: false
+    embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/imagenet/embeddings_dict.pth"
+    read_labels: false
+    save_labels: false
+    labels_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/labels/imagenet/"
+    read_knn: false
+    save_knn: false
+    knn_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/imagenet/"
+    read_edge_attr: false
+    save_edge_attr: false
+    edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/imagenet/"

@@ -22,8 +22,8 @@ SYNTHETIC_CIFAR100_1M:
   logging:
     log_interval: 15000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_tdds_SYNTHETIC_CIFAR100_1M_avg_resnet50-self-trained_k_50_seed_200000_euclidean.json"
-  wandb_name: "knn-tdds-k-50-seed-200000-"
+  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_extrapolation_SYNTHETIC_CIFAR100_1M_resnet50-self-trained_k_50_seed_100000_euclidean.json"
+  wandb_name: "gnn-DU-k-50-seed-100000-"
 
 PLACES_365:
   experiment:
@@ -44,10 +44,37 @@ PLACES_365:
     weight_decay: 0.001
 
   pruning:
-    percentages: [0.9, 0.95, 0.8, 0.5]
+    percentages: [0.95, 0.9, 0.8, 0.5, 0.2, 0.1]
 
   logging:
     log_interval: 15000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_extrapolation_DU_PLACES_365_resnet50-self-trained_k_10_seed_450000_euclidean.json"
+  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_extrapolation_DU_PLACES_365_resnet50-self-trained_k_10_seed_180000_euclidean.json"
   wandb_name: "gnn-DU-k-10-seed-450000-"
+
+IMAGENET:
+  experiment:
+    num_iterations: 3
+
+  dataset:
+    name: "IMAGENET"
+    num_classes: 1000
+    image_size: 64
+
+  model:
+    name: "ResNet18"
+
+  training:
+    batch_size: 256
+    num_epochs: 90
+    lr: 0.001
+    weight_decay: 0.0001
+
+  pruning:
+    percentages: [0.95, 0.9, 0.8, 0.5, 0.2, 0.1]
+
+  logging:
+    log_interval: 45000
+
+  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn__du_IMAGENET_avg_resnet18-self-trained_k_50_seed_128117_euclidean__4_20.json"
+  wandb_name: "knn-DU-k-50-seed-128117-"

@@ -18,7 +18,7 @@ from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from src.utils.helpers import parse_config, seed_everything
+from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.models import load_model_by_name
 
@@ -128,6 +128,7 @@ def prepare_data_graph(
     seed_samples,
     training_dict,
     k,
+    use_labels=True,
     read_knn=False,
     save_knn=True,
     knn_file=None,
@@ -161,7 +162,11 @@ def prepare_data_graph(
         device=device,
     )
 
-    x = torch.cat((torch.eye(num_classes)[labels].to(device), embeddings), dim=1)
+    if use_labels:
+        x = torch.cat((torch.eye(num_classes)[labels].to(device), embeddings), dim=1)
+    
+    else:
+        x = embeddings
 
     val_idxs = random.sample(seed_samples, int(val_frac * len(seed_samples)))
     train_idxs = [i for i in seed_samples if i not in val_idxs]
@@ -241,7 +246,7 @@ def main(cfg_path: str):
     seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.CIFAR10
+    cfg = cfg.IMAGENET
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     trainset, train_loader, _, num_samples = prepare_data(cfg.dataset, 1024)
@@ -376,6 +381,7 @@ def main(cfg_path: str):
                 seed_samples,
                 training_dict,
                 k,
+                use_labels=cfg.hyperparams.use_labels,
                 read_knn=cfg.checkpoints.read_knn,
                 save_knn=cfg.checkpoints.save_knn,
                 knn_file=cfg.checkpoints.knn_path + "knn_k_" + str(k) + ".pth",

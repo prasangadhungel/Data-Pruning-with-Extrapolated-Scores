@@ -14,7 +14,7 @@ from scipy.special import softmax
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.helpers import parse_config, seed_everything
+from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model
@@ -89,10 +89,10 @@ def generate(probs, indexes, cfg):
 def main(cfg_path: str):
     seed_everything(42)
 
-    cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.PLACES_365
+    cfg = cfg.IMAGENET
 
+    logger.info("TDDS Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
@@ -139,7 +139,7 @@ def main(cfg_path: str):
 
         torch.cuda.empty_cache()
         output_epochs, index_epochs = [], []
-        for epoch in range(cfg.training.num_epochs):
+        for epoch in range(cfg.pruning.num_epochs):
             train_losses = []
 
             for batch_idx, (data, target, sample_idx) in enumerate(train_loader):
@@ -172,19 +172,20 @@ def main(cfg_path: str):
 
                 if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
                     logger.info(
-                        f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
+                        f"Epoch {epoch + 1}/{cfg.pruning.num_epochs}, "
                         f"Itr {batch_idx}/{len(train_loader)}, "
-                        f"Loss: {torch.stack(train_losses).mean().item():.5f}, "
-                        f"Test Acc: {evaluate(model, test_loader, device):.5f}, "
+                        f"Loss: {torch.stack(train_losses).mean().item():.4f}, "
+                        f"Test Acc: {evaluate(model, test_loader, device):.4f}, "
                     )
 
+            # if cfg.pruning.num_epochs - epoch <= cfg.pruning.trajectory:
             output_epochs.append(output_epoch)
             index_epochs.append(index_epoch)
 
             test_acc = evaluate(model, test_loader, device)
             train_loss = torch.stack(train_losses).mean().item()
             logger.info(
-                f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Accuracy: {test_acc:.5f}"
+                f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}, Test Accuracy: {test_acc:.4f}"
             )
 
         model_name = f"{cfg.paths.models}/tdds"
@@ -215,7 +216,7 @@ def main(cfg_path: str):
                 reversed_mapping[key]: value for key, value in tdds_score.items()
             }
 
-        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_last_tdds_{num_itr}"
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_tdds_{num_itr}"
 
         if cfg.dataset.for_extrapolation.value is True:
             output_path += f"_{cfg.dataset.for_extrapolation.subset_size}"

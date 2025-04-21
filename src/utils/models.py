@@ -255,6 +255,16 @@ def load_model_by_name(
         )
         embedding_model = ResNetEmbedding(model).to(device)
 
+    elif model_name == "resnet18-self-trained":
+        model = load_model(
+            "ResNet18",
+            num_classes=num_classes,
+            image_size=image_size,
+            model_path=path,
+            device=device,
+        )
+        embedding_model = ResNetEmbedding(model).to(device)
+
     elif model_name == "resnet18":
         weights = ResNet18_Weights.DEFAULT
         embedding_model = resnet_18(weights=weights).to(device)

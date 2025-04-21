@@ -7,7 +7,7 @@ CIFAR10:
     num_classes: 10
     image_size: 32
     for_extrapolation:
-      value: true
+      value: false
       subset_size: 20000
 
   model:
@@ -33,8 +33,8 @@ CIFAR10:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/full_data"
 
 
 SYNTHETIC_CIFAR100_1M:
@@ -46,7 +46,7 @@ SYNTHETIC_CIFAR100_1M:
     num_classes: 100
     image_size: 32
     for_extrapolation:
-      value: true
+      value: false
       subset_size: 200000
 
   model:
@@ -61,19 +61,19 @@ SYNTHETIC_CIFAR100_1M:
     nesterov: true
 
   pruning:
-    prune: false
+    prune: true
     window: 10
     num_epochs: 50
     trajectory: 10
     decay: 0.9
-    percentages: [0.5, 0.2, 0.1]
+    percentages: [0.95, 0.95, 0.8, 0.5, 0.2, 0.1]
 
   logging:
     log_interval: 15000
 
   paths:
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/subset_data"
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/full_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
 
 
 PLACES_365:
@@ -85,7 +85,7 @@ PLACES_365:
     num_classes: 365
     image_size: 64
     for_extrapolation:
-      value: true
+      value: false
       subset_size: 450000
 
   model:
@@ -93,23 +93,62 @@ PLACES_365:
 
   training:
     batch_size: 128
-    num_epochs: 35
+    num_epochs: 50
     lr: 0.001
     momentum: 0.9
     weight_decay: 0.0005
     nesterov: true
 
   pruning:
-    prune: false
+    prune: true
     window: 10
-    num_epochs: 35
+    num_epochs: 50
     trajectory: 10
     decay: 0.9
-    percentages: [0.2, 0.1]
+    percentages: [0.95, 0.95, 0.8, 0.5, 0.2, 0.1]
 
   logging:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"
+
+IMAGENET:
+  experiment:
+    num_iterations: 3
+
+  dataset:
+    name: "IMAGENET"
+    num_classes: 1000
+    image_size: 64
+    for_extrapolation:
+      value: false
+      subset_size: 256234
+      # subset_size: 128117
+
+  model:
+    name: "ResNet18"
+
+  training:
+    batch_size: 256
+    num_epochs: 90
+    lr: 0.001
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
+
+  pruning:
+    prune: true
+    window: 10
+    num_epochs: 90
+    trajectory: 10
+    decay: 0.9
+    percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
+
+  logging:
+    log_interval: 45000
+
+  paths:
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/imagenet/full_data"

@@ -12,7 +12,7 @@ from torch.optim import Adam
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.helpers import parse_config, seed_everything
+from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
 from utils.models import get_model

@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.helpers import parse_config
+from utils.helpers import parse_config
 from utils.dataset import prepare_data
 from utils.models import load_model_by_name
 
@@ -127,7 +127,7 @@ def get_correlation(
 
 def main(cfg_path: str):
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.CIFAR10
+    cfg = cfg.IMAGENET
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Dataset: {cfg.dataset.name}, Device: {device}")
@@ -194,10 +194,6 @@ def main(cfg_path: str):
             f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}"
         )
 
-    results = []
-
-    models, ks, num_seeds, distance_metrics = [], [], [], []
-    corr_avgs, corr_weighteds, spearman_avgs, spearman_weighteds = [], [], [], []
 
     for model_name in tqdm(cfg.models.names):
         if cfg.checkpoints.read_embeddings:
@@ -261,15 +257,6 @@ def main(cfg_path: str):
             )
             num_seed = len(subset_scores_dict)
 
-            models.append(model_name)
-            ks.append(k)
-            num_seeds.append(num_seed)
-
-            distance_metrics.append(distance)
-            corr_avgs.append(corr_avg)
-            corr_weighteds.append(corr_weighted)
-            spearman_avgs.append(spearman_avg)
-            spearman_weighteds.append(spearman_weighted)
             logger.info(
                 f"k: {k}, num_seed: {num_seed}, distance_metric: {distance}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}",
             )
@@ -290,19 +277,6 @@ def main(cfg_path: str):
 
             logger.info(f"Saved average scores to {filename_avg}")
 
-    results = pd.DataFrame(
-        {
-            "model": models,
-            "k": ks,
-            "num_seeds": num_seeds,
-            "distance_metric": distance_metrics,
-            "corr_avg": corr_avgs,
-            "corr_weighted": corr_weighteds,
-            "spearman_avg": spearman_avgs,
-            "spearman_weighted": spearman_weighteds,
-        }
-    )
-    results.to_csv(cfg.output.results_path, index=False)
 
 
 if __name__ == "__main__":

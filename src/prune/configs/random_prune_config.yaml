@@ -50,7 +50,7 @@ PLACES_365:
 
 IMAGENET:
   experiment:
-    num_iterations: 1
+    num_iterations: 3
 
   dataset:
     name: "IMAGENET"

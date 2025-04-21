@@ -19,7 +19,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from loguru import logger
 from torchvision.datasets import Places365
 
-from src.utils.helpers import parse_config, seed_everything
+from utils.helpers import parse_config, seed_everything
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
@@ -472,40 +472,17 @@ def main(cfg_path: str):
                 subset_indices=None,
                 args=args,
                 device=device,
-                compute_score=False,
+                compute_score=True,
                 save_scores=False,
             )
 
             if args.pruning.prune:
-                for prune_percentage in args.pruning.percentages:
-                    logger.info(f"Random pruning {prune_percentage}")
-                    frac_to_keep = 1 - prune_percentage
-                    logger.info(f"Num samples: {num_samples}")
-                    num_samples_to_keep = int(num_samples * frac_to_keep)
-                    indices_to_keep = random.sample(
-                        range(num_samples), num_samples_to_keep
-                    )
-                    logger.info(f"Num samples to keep: {len(indices_to_keep)}")
-                    logger.info(f"First 10 indices to keep: {indices_to_keep[:10]}")
-
-                    run_turtle(
-                        [Zs_train],
-                        [Zs_val],
-                        y_gt_val,
-                        indices_to_keep,
-                        args,
-                        device,
-                        compute_score=False,
-                        save_scores=False,
-                    )
-
                 sorted_importance_scores = {
                     k: v
                     for k, v in sorted(
                         du_score.items(), key=lambda item: item[1], reverse=True
                     )
                 }
-
                 for prune_percentage in args.pruning.percentages:
                     logger.info(f"DU pruning {prune_percentage}")
                     top_samples = list(sorted_importance_scores.keys())[
@@ -522,6 +499,27 @@ def main(cfg_path: str):
                         args,
                         device,
                         compute_score=False,
+                    )
+
+                for prune_percentage in args.pruning.percentages:
+                    logger.info(f"Random pruning {prune_percentage}")
+                    frac_to_keep = 1 - prune_percentage
+                    logger.info(f"Num samples: {num_samples}")
+                    num_samples_to_keep = int(num_samples * frac_to_keep)
+                    indices_to_keep = random.sample(
+                        range(num_samples), num_samples_to_keep
+                    )
+                    logger.info(f"Num samples to keep: {len(indices_to_keep)}")
+
+                    run_turtle(
+                        [Zs_train],
+                        [Zs_val],
+                        y_gt_val,
+                        indices_to_keep,
+                        args,
+                        device,
+                        compute_score=False,
+                        save_scores=False,
                     )
 
 
