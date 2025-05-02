@@ -54,7 +54,7 @@ def get_correlation(
 
     unseed_idx, seed_idx = knn(
         x=seed_embeddings,  # source
-        y=unseed_embeddings,  # target
+        y=unseed_embeddings,  # target, for which we want to find the neighbors
         k=k,
         cosine=use_cosine,
     )
@@ -65,6 +65,12 @@ def get_correlation(
     sum_unweighted = torch.zeros(U, dtype=torch.float, device=device)
     sum_weighted = torch.zeros(U, dtype=torch.float, device=device)
     sum_weights = torch.zeros(U, dtype=torch.float, device=device)
+
+    # one caveat of using knn from torch_cluster is that it returns only
+    # the indices of the neighbors, not the distances. Average knn doesn't
+    # require the distance, but weighted knn does. So we need to compute 
+    # the distances ourselves. This would increase the computation time
+    # but with better implementation, we can save some computation time
 
     # diffs = seed_embeddings[seed_idx] - unseed_embeddings[unseed_idx]
     # dists = diffs.norm(p=2, dim=1)  # shape: [k * U]
@@ -112,8 +118,8 @@ def get_correlation(
         knn_dict_avg[str(sample_id)] = float(knn_avg_scores_np[i])
 
     for sample_id in seed_samples:
-        knn_dict_weighted[str(sample_id)] = float(full_scores_dict[str(sample_id)])
-        knn_dict_avg[str(sample_id)] = float(full_scores_dict[str(sample_id)])
+        knn_dict_weighted[str(sample_id)] = float(subset_scores_dict[str(sample_id)])
+        knn_dict_avg[str(sample_id)] = float(subset_scores_dict[str(sample_id)])
 
     return (
         corr_avg,
