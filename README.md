@@ -1,1 +1,1 @@
-# unsupervised-data-pruning
+# Pruning through score extrapolation
