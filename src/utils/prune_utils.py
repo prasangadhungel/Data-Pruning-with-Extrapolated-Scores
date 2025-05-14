@@ -1,5 +1,6 @@
 import sys
 import time
+from collections import defaultdict
 from types import SimpleNamespace
 
 import numpy as np
@@ -81,7 +82,15 @@ def get_error(model, X, target, num_classes=10):
     return scores
 
 
-def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
+def prune(
+    trainset,
+    test_loader,
+    scores_dict,
+    cfg,
+    wandb_name,
+    rebalance_labels=False,
+    device="cuda",
+):
     """
     Prune the dataset based on the uncertainty scores.
     """
@@ -98,14 +107,34 @@ def prune(trainset, test_loader, scores_dict, cfg, wandb_name, device):
         )
         wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
 
-        # sort the uncertainty scores in descending order and get the indices of most uncertain samples
+        if not rebalance_labels:
+            # sort the uncertainty scores in descending order and get the indices of most uncertain samples
+            top_samples = list(sorted_importance_scores.keys())[
+                : int((1 - prune_percentage) * len(sorted_importance_scores))
+            ]
+            # Get the indices of the top samples
+            indices_to_keep = [int(sample) for sample in top_samples]
 
-        top_samples = list(sorted_importance_scores.keys())[
-            : int((1 - prune_percentage) * len(sorted_importance_scores))
-        ]
+        else:
+            # sort based on the labels and then prune the dataset
+            # considering stratified sampling based on the labels
+            label_to_indices = defaultdict(list)
+            for idx in range(len(trainset)):
+                _, label, sample_idx = trainset[
+                    idx
+                ]  # assuming trainset returns (img, label, sample_idx)
+                label_to_indices[label].append(sample_idx)
 
-        # Get the indices of the top samples
-        indices_to_keep = [int(sample) for sample in top_samples]
+            # Perform stratified pruning
+            indices_to_keep = []
+
+            for label, indices in label_to_indices.items():
+                # Sort these indices by their importance score (descending)
+                indices.sort(key=lambda x: sorted_importance_scores[x], reverse=True)
+
+                # Keep top (1 - prune_percentage) of them
+                retain_count = int((1 - prune_percentage) * len(indices))
+                indices_to_keep.extend(indices[:retain_count])
 
         pruned_trainset = torch.utils.data.Subset(trainset, indices_to_keep)
 

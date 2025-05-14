@@ -11,12 +11,13 @@ from loguru import logger
 from numpy import linalg as LA
 from omegaconf import OmegaConf
 from scipy.special import softmax
+from torch.optim import Adam
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate
+from utils.helpers import parse_config
 from utils.models import get_model
 from utils.prune_utils import prune
 
@@ -24,7 +25,7 @@ logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 
-def generate(probs, indexes, cfg):
+def generate(probs, losses, indexes, cfg):
     # Initialize variables
     k = 0
     window_size = cfg.pruning.window
@@ -87,12 +88,15 @@ def generate(probs, indexes, cfg):
 
 
 def main(cfg_path: str):
-    seed_everything(42)
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
 
+    cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
     cfg = cfg.IMAGENET
 
-    logger.info("TDDS Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
@@ -137,17 +141,29 @@ def main(cfg_path: str):
             nesterov=cfg.training.nesterov,
         )
 
-        torch.cuda.empty_cache()
-        output_epochs, index_epochs = [], []
+        criterion = torch.nn.CrossEntropyLoss()
+        model.cuda()
+        criterion.cuda()
+
+        output_epochs, loss_epochs, index_epochs = [], [], []
         for epoch in range(cfg.pruning.num_epochs):
             train_losses = []
 
             for batch_idx, (data, target, sample_idx) in enumerate(train_loader):
                 data, target = data.to(device), target.to(device)
-                output = model(data)
-                # loss = criterion(output, target_var)
+                input_var = torch.autograd.Variable(data)
+                target_var = torch.autograd.Variable(target)
+                output = model(input_var)
+                loss = criterion(output, target_var)
 
-                loss = torch.nn.functional.cross_entropy(output, target)
+                # loss = torch.nn.functional.cross_entropy(output, target)
+
+                loss_batch = (
+                    torch.nn.functional.cross_entropy(output, target_var, reduce=False)
+                    .detach()
+                    .cpu()
+                )
+
                 index_batch = sample_idx
 
                 # use the mapped indices if the dataset is for extrapolation
@@ -155,9 +171,13 @@ def main(cfg_path: str):
                     index_batch = [mapping[idx.item()] for idx in index_batch]
 
                 if batch_idx == 0:
+                    loss_epoch = np.array(loss_batch)
                     output_epoch = np.array(output.detach().cpu())
                     index_epoch = np.array(index_batch)
                 else:
+                    loss_epoch = np.concatenate(
+                        (loss_epoch, np.array(loss_batch)), axis=0
+                    )
                     output_epoch = np.concatenate(
                         (output_epoch, np.array(output.detach().cpu())), axis=0
                     )
@@ -172,27 +192,28 @@ def main(cfg_path: str):
 
                 if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
                     logger.info(
-                        f"Epoch {epoch + 1}/{cfg.pruning.num_epochs}, "
+                        f"Epoch {epoch + 1}/{cfg.training.num_epochs}, "
                         f"Itr {batch_idx}/{len(train_loader)}, "
-                        f"Loss: {torch.stack(train_losses).mean().item():.4f}, "
-                        f"Test Acc: {evaluate(model, test_loader, device):.4f}, "
+                        f"Loss: {torch.stack(train_losses).mean().item():.5f}, "
+                        f"Test Acc: {evaluate(model, test_loader, device):.5f}, "
                     )
 
-            # if cfg.pruning.num_epochs - epoch <= cfg.pruning.trajectory:
-            output_epochs.append(output_epoch)
-            index_epochs.append(index_epoch)
+            if cfg.pruning.num_epochs - epoch <= cfg.pruning.trajectory:
+                output_epochs.append(output_epoch)
+                loss_epochs.append(loss_epoch)
+                index_epochs.append(index_epoch)
 
             test_acc = evaluate(model, test_loader, device)
             train_loss = torch.stack(train_losses).mean().item()
             logger.info(
-                f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}, Test Accuracy: {test_acc:.4f}"
+                f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Accuracy: {test_acc:.5f}"
             )
 
-        model_name = f"{cfg.paths.models}/tdds"
+        model_name = f"{cfg.paths.models}/tdds_last"
         if cfg.dataset.for_extrapolation.value is True:
             model_name += f"_{cfg.dataset.for_extrapolation.subset_size}"
 
-        model_name += ".pth"
+        model_name += f".pth"
 
         torch.save(model.state_dict(), model_name)
 
@@ -203,20 +224,24 @@ def main(cfg_path: str):
         # instead take the last trajectory epochs
         output_epochs = np.array(output_epochs[-cfg.pruning.trajectory :])
 
+        # loss_epochs = np.array(loss_epochs[: cfg.pruning.trajectory])
+        loss_epochs = np.array(loss_epochs[-cfg.pruning.trajectory :])
+
         # index_epochs = np.array(index_epochs[: cfg.pruning.trajectory])
         index_epochs = np.array(index_epochs[-cfg.pruning.trajectory :])
 
         logger.info(f"Shape of output_epochs: {output_epochs.shape}")
+        logger.info(f"Shape of loss_epochs: {loss_epochs.shape}")
         logger.info(f"Shape of index_epochs: {index_epochs.shape}")
 
-        tdds_score = generate(output_epochs, index_epochs, cfg)
+        tdds_score = generate(output_epochs, loss_epochs, index_epochs, cfg)
 
         if cfg.dataset.for_extrapolation.value is True:
             tdds_score = {
                 reversed_mapping[key]: value for key, value in tdds_score.items()
             }
 
-        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_tdds_{num_itr}"
+        output_path = f"{cfg.paths.scores}/{cfg.dataset.name}_last_tdds_{num_itr}"
 
         if cfg.dataset.for_extrapolation.value is True:
             output_path += f"_{cfg.dataset.for_extrapolation.subset_size}"
@@ -236,7 +261,7 @@ def main(cfg_path: str):
                 test_loader=test_loader,
                 scores_dict=tdds_score,
                 cfg=cfg,
-                wandb_name="tdds-",
+                wandb_name="tdds-last-",
                 device=device,
             )
 

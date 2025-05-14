@@ -1,22 +1,23 @@
-# for SYNTHETIC_CIFAR100_1M dataset
 CIFAR10:
   experiment:
-    num_iterations: 1
+    num_iterations: 2
 
   dataset:
     name: "CIFAR10"
     num_classes: 10
     image_size: 32
     for_extrapolation:
-      value: false
-      subset_size: 20000
+      value: true
+      # value: false
+      subset_size: 10000
 
   model:
-    name: "ResNet50"
+    name: "ResNet18"
 
   pruning:
     prune: false
-    percentages: [0.5, 0.2, 0.1]
+    # prune: true
+    percentages: [0.95, 0.9, 0.8, 0.5, 0.2, 0.1]
 
   training:
     batch_size: 256
@@ -31,8 +32,10 @@ CIFAR10:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/full_data"
+    # scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    # models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/full_data"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data"
 
 
 SYNTHETIC_CIFAR100_1M:
@@ -45,7 +48,7 @@ SYNTHETIC_CIFAR100_1M:
     image_size: 32
     for_extrapolation:
       value: true
-      subset_size: 10000
+      subset_size: 300000
 
   model:
     name: "ResNet50"
@@ -80,7 +83,7 @@ PLACES_365:
     image_size: 64
     for_extrapolation:
       value: true
-      subset_size: 360000
+      subset_size: 450000
 
   model:
     name: "ResNet50"

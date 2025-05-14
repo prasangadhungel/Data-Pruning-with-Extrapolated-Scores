@@ -1,17 +1,18 @@
 CIFAR10:
   experiment:
-    num_iterations: 1
+    num_iterations: 2
 
   dataset:
     name: "CIFAR10"
     num_classes: 10
     image_size: 32
     for_extrapolation:
-      value: false
-      subset_size: 20000
+      # value: false
+      value: true
+      subset_size: 10000
 
   model:
-    name: "ResNet50"
+    name: "ResNet18"
 
   training:
     batch_size: 256
@@ -22,19 +23,22 @@ CIFAR10:
     nesterov: true
 
   pruning:
+    # prune: true
     prune: false
     window: 10
     num_epochs: 50
     trajectory: 10
     decay: 0.9
-    percentages: [0.2, 0.1]
+    percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
 
   logging:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/full_data"
+    # scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    # models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/full_data"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data"
 
 
 SYNTHETIC_CIFAR100_1M:
@@ -85,7 +89,7 @@ PLACES_365:
     num_classes: 365
     image_size: 64
     for_extrapolation:
-      value: false
+      value: true
       subset_size: 450000
 
   model:
@@ -100,7 +104,7 @@ PLACES_365:
     nesterov: true
 
   pruning:
-    prune: true
+    prune: false
     window: 10
     num_epochs: 50
     trajectory: 10
@@ -111,12 +115,12 @@ PLACES_365:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/full_data"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data"
 
 IMAGENET:
   experiment:
-    num_iterations: 3
+    num_iterations: 1
 
   dataset:
     name: "IMAGENET"
@@ -144,7 +148,7 @@ IMAGENET:
     num_epochs: 90
     trajectory: 10
     decay: 0.9
-    percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
+    percentages: [0.95, 0.9, 0.8, 0.5, 0.2, 0.1]
 
   logging:
     log_interval: 45000

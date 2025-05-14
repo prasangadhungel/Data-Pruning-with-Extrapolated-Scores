@@ -5,23 +5,23 @@ CIFAR10:
     image_size: 32
 
   scores:
-    type: "DU"
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
+    type: "du"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_dynamic_uncertainty_0_5_12.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0_10000_5_14.json"
     normalize_scores: false
     
   models:
-    names: ["resnet50-self-trained"]
+    names: ["resnet18-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data/dynamic_uncertainty.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data/dynamic_uncertainty_10000.pth"
 
   hyperparams:
     use_labels: true
-    k_values: [10]
+    k_values: [10, 20]
     distance: "euclidean"
     lr: 0.001
     batch_size: 128
-    epochs: 25
+    epochs: 35
     gnn:
       type: "gcn"  # Options: "gcn", "gat"
       hidden_layers: [512, 256, 128]
@@ -151,15 +151,15 @@ IMAGENET:
     image_size: 64
 
   scores:
-    type: "du"
-    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_256234_4_19.json"
+    type: "tdds"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/IMAGENET_tdds_0_4_26.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/IMAGENET_tdds_0_256234_4_26.json"
     normalize_scores: false
     
   models:
     names: ["resnet18-self-trained"]
     resnet50:
-      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/imagenet/subset_data/dynamic_uncertainty_256234.pth"
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/imagenet/subset_data/tdds_256234.pth"
 
   hyperparams:
     use_labels: true

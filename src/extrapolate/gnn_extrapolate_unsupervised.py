@@ -21,8 +21,8 @@ from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from torchvision.datasets import Places365
 
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
+from utils.helpers import parse_config, seed_everything
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")

@@ -6,20 +6,182 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
+import torchvision.datasets as dsets
+import torchvision.transforms as transforms
 from loguru import logger
 from omegaconf import OmegaConf
 from scipy.stats import spearmanr
+from torch.utils.data import DataLoader, Dataset
 from torch_cluster.knn import knn
 from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.helpers import parse_config
 from utils.dataset import prepare_data
+from utils.helpers import parse_config
 from utils.models import load_model_by_name
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
+
+
+IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
+
+
+def _convert_image_to_rgb(image):
+    if torch.is_tensor(image):
+        return image
+    else:
+        return image.convert("RGB")
+
+
+def _safe_to_tensor(x):
+    if torch.is_tensor(x):
+        return x
+    else:
+        return transforms.ToTensor()(x)
+
+
+def get_default_transforms():
+    return transforms.Compose(
+        [
+            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(224),
+            _convert_image_to_rgb,
+            _safe_to_tensor,
+            transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
+        ]
+    )
+
+
+class IndexDataset(Dataset):
+    def __init__(self, dataset: Dataset) -> None:
+        self.dataset = dataset
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        return (item[0], item[1], idx)
+
+
+class CustomDatasetWithIndices(Dataset):
+    def __init__(self, images, labels, indices, transform=None):
+        self.images = images
+        self.labels = labels
+        self.indices = indices
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+        index = self.indices[idx]
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label, index
+
+
+def get_datasets(dataset, transform, root_dir="./data"):
+    data_path = os.path.join(root_dir, "datasets")
+
+    if dataset == "CIFAR10":
+        train_dataset = dsets.CIFAR10(
+            root=data_path, train=True, transform=transform, download=True
+        )
+        val_dataset = dsets.CIFAR10(
+            root=data_path, train=False, transform=transform, download=True
+        )
+    elif dataset == "CIFAR100":
+        train_dataset = dsets.CIFAR100(
+            root=data_path, train=True, transform=transform, download=True
+        )
+        val_dataset = dsets.CIFAR100(
+            root=data_path, train=False, transform=transform, download=True
+        )
+    elif dataset == "SYNTHETIC_CIFAR100_1M":
+        data = np.load(
+            "/nfs/homedirs/dhp/unsupervised-data-pruning/data/cifar100_1m.npz"
+        )
+
+        num_samples = len(data["label"])
+        train_images = data["image"]
+        train_labels = data["label"]
+
+        indices = np.arange(num_samples)
+        transform = get_default_transforms()
+        train_dataset = CustomDatasetWithIndices(
+            train_images, train_labels, indices, transform=transform
+        )
+        val_dataset = dsets.CIFAR100(
+            root=data_path, train=False, transform=transform, download=True
+        )
+        val_dataset = IndexDataset(val_dataset)
+        return train_dataset, val_dataset
+
+    train_dataset = IndexDataset(train_dataset)
+    val_dataset = IndexDataset(val_dataset)
+
+    return train_dataset, val_dataset
+
+
+def get_dataloaders(dataset, transform, batch_size, root_dir="data"):
+    if transform is None:
+        transform = get_default_transforms()
+    train_dataset, val_dataset = get_datasets(dataset, transform, root_dir)
+    trainloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=False, num_workers=10
+    )
+    valloader = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=False, num_workers=10
+    )
+    return trainloader, valloader
+
+
+def get_dataloader_from_trainset(trainset, batch_size, shuffle=False):
+    return DataLoader(trainset, batch_size=batch_size, shuffle=shuffle, num_workers=10)
+
+
+def get_features(dataloader, model, device):
+    features_dict = {}
+    with torch.no_grad():
+        for x, y, idx in tqdm(dataloader):
+            features = model(x.to(device)).detach().cpu().numpy()
+            for i, index in enumerate(idx.numpy()):
+                features_dict[index] = features[i]
+
+    sorted_indices = sorted(features_dict.keys())
+    sorted_features = np.array([features_dict[i] for i in sorted_indices])
+    # convert it to torch tensor
+    sorted_features = torch.tensor(sorted_features, dtype=torch.float32)
+    return sorted_features
+
+
+def run_representation(args, device="cuda"):
+    torch.hub.set_dir(args.model.path)
+    model = torch.hub.load(args.model.torch_hub, args.model.version).to(device)
+    model.eval()
+    logger.info(
+        f"Model parameters: {np.sum([int(np.prod(p.shape)) for p in model.parameters()]):,}"
+    )
+    preprocess = None
+
+    trainloader, valloader = get_dataloaders(
+        args.dataset.name,
+        preprocess,
+        args.training.batch_size_repr,
+        args.dataset.root_dir,
+    )
+    feats_train = get_features(trainloader, model, device)
+    feats_val = get_features(valloader, model, device)
+
+    return feats_train, feats_val
 
 
 def get_correlation(
@@ -112,8 +274,8 @@ def get_correlation(
         knn_dict_avg[str(sample_id)] = float(knn_avg_scores_np[i])
 
     for sample_id in seed_samples:
-        knn_dict_weighted[str(sample_id)] = float(full_scores_dict[str(sample_id)])
-        knn_dict_avg[str(sample_id)] = float(full_scores_dict[str(sample_id)])
+        knn_dict_weighted[str(sample_id)] = float(subset_scores_dict[str(sample_id)])
+        knn_dict_avg[str(sample_id)] = float(subset_scores_dict[str(sample_id)])
 
     return (
         corr_avg,
@@ -127,7 +289,7 @@ def get_correlation(
 
 def main(cfg_path: str):
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.SYNTHETIC_CIFAR100_1M
+    cfg = cfg.CIFAR10
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Dataset: {cfg.dataset.name}, Device: {device}")
@@ -194,49 +356,29 @@ def main(cfg_path: str):
             f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}"
         )
 
-    results = []
-
-    models, ks, num_seeds, distance_metrics = [], [], [], []
-    corr_avgs, corr_weighteds, spearman_avgs, spearman_weighteds = [], [], [], []
+    models, ks, num_seeds = [], [], []
 
     for model_name in tqdm(cfg.models.names):
         if cfg.checkpoints.read_embeddings:
-            logger.info("Reading embeddings")
             embeddings = torch.load(
                 cfg.checkpoints.embeddings_file, map_location=device
             )
             logger.info(f"Loaded embeddings from {cfg.checkpoints.embeddings_file}")
 
         else:
-            logger.info("Computing embeddings")
+            torch.hub.set_dir(cfg.models.path)
+            model = torch.hub.load(cfg.models.torch_hub, cfg.models.version).to(device)
+            model.eval()
+            preprocess = None
 
-            trainset, train_loader, _, num_samples = prepare_data(cfg.dataset, 1024)
-            embedding_model = load_model_by_name(
-                model_name,
-                cfg.dataset.num_classes,
-                cfg.dataset.image_size,
-                cfg.models.resnet50.path,
-                device,
+            trainloader, _ = get_dataloaders(
+                cfg.dataset.name,
+                preprocess,
+                cfg.training.batch_size_repr,
+                cfg.dataset.root_dir,
             )
-            embedding_model.eval()
 
-            sample_input, _, _ = trainset[0]
-            sample_input = sample_input.unsqueeze(0).to(device)
-            with torch.no_grad():
-                sample_output = embedding_model(sample_input)
-            embedding_dim = sample_output.shape[1]
-
-            embeddings = torch.zeros(num_samples, embedding_dim, device=device)
-
-            for images, _, sample_idxs in tqdm(
-                train_loader, mininterval=20, maxinterval=40
-            ):
-                images = images.to(device)
-                sample_idxs = sample_idxs.to(device)
-                with torch.no_grad():
-                    batch_embeddings = embedding_model(images)
-
-                embeddings[sample_idxs] = batch_embeddings
+            embeddings = get_features(trainloader, model, device)
 
             if cfg.checkpoints.save_embeddings:
                 torch.save(embeddings, cfg.checkpoints.embeddings_file)
@@ -265,11 +407,6 @@ def main(cfg_path: str):
             ks.append(k)
             num_seeds.append(num_seed)
 
-            distance_metrics.append(distance)
-            corr_avgs.append(corr_avg)
-            corr_weighteds.append(corr_weighted)
-            spearman_avgs.append(spearman_avg)
-            spearman_weighteds.append(spearman_weighted)
             logger.info(
                 f"k: {k}, num_seed: {num_seed}, distance_metric: {distance}, corr_avg: {corr_avg}, corr_weighted: {corr_weighted}, spearman_avg: {spearman_avg}, spearman_weighted: {spearman_weighted}",
             )
@@ -290,24 +427,10 @@ def main(cfg_path: str):
 
             logger.info(f"Saved average scores to {filename_avg}")
 
-    results = pd.DataFrame(
-        {
-            "model": models,
-            "k": ks,
-            "num_seeds": num_seeds,
-            "distance_metric": distance_metrics,
-            "corr_avg": corr_avgs,
-            "corr_weighted": corr_weighteds,
-            "spearman_avg": spearman_avgs,
-            "spearman_weighted": spearman_weighteds,
-        }
-    )
-    results.to_csv(cfg.output.results_path, index=False)
-
 
 if __name__ == "__main__":
     default_config_path = os.path.join(
-        os.path.dirname(__file__), "configs", "knn_config.yaml"
+        os.path.dirname(__file__), "configs", "knn_config_unsupervised.yaml"
     )
     config_path = parse_config(
         default_config=default_config_path, description="Run KNN Extrapolation"

@@ -377,7 +377,10 @@ def run_turtle(
                 ]
             )
             entr_reg = sum(
-                [torch.special.entr(label_in_space.mean(0)).sum() for label_in_space in label_per_space]
+                [
+                    torch.special.entr(label_in_space.mean(0)).sum()
+                    for label_in_space in label_per_space
+                ]
             )
             (pred_error - args.training.gamma * entr_reg).backward()
             optimizer.step()

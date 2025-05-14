@@ -8,7 +8,7 @@ CIFAR10:
   scores:
     type: "unsupervised-DU"
     original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/CIFAR10_unsupervised_dynamic_uncertainty_4_6.json"
-    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_unsupervised_dynamic_uncertainty_4_9_subset.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/CIFAR10_unsupervised_dynamic_uncertainty_5_11.json"
     normalize_scores: false
     
   models:
@@ -51,7 +51,7 @@ CIFAR10:
 
   output:
     results_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/data/gnn_extrapolation_cifar10.csv"
-    gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn"
+    knn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn"
 
   checkpoints:
     read_embeddings: false
