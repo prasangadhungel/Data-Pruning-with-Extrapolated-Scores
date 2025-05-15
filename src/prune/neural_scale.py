@@ -10,8 +10,8 @@ from sklearn.cluster import KMeans
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
+from utils.helpers import parse_config, seed_everything
 from utils.prune_utils import get_embeddings, prune
 
 logger.remove()

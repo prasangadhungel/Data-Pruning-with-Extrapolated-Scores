@@ -1,6 +1,6 @@
 CIFAR10:
   experiment:
-    num_iterations: 5
+    num_iterations: 1
 
   dataset:
     name: "CIFAR10"
@@ -9,8 +9,8 @@ CIFAR10:
     image_size: 32
     num_samples: 50000
     for_extrapolation:
-      value: false
-      subset_size: 20000
+      value: true
+      subset_size: 10000
 
   model:
     name: "dinov2"
@@ -19,7 +19,7 @@ CIFAR10:
     version: "dinov2_vitg14"
 
   pruning:
-    prune: true
+    prune: false
     percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
 
   training:
@@ -40,7 +40,7 @@ CIFAR10:
     window: 10
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
     softmax_dir: "/nfs/homedirs/dhp/unsupervised-data-pruning/checkpoints/CIFAR10/subset_data"
     save_softmax: false
     read_softmax: false

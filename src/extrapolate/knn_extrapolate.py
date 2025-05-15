@@ -4,7 +4,6 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
 import torch
 from loguru import logger
 from omegaconf import OmegaConf
@@ -14,8 +13,8 @@ from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.helpers import parse_config
 from utils.dataset import prepare_data
+from utils.helpers import parse_config
 from utils.models import load_model_by_name
 
 logger.remove()
@@ -68,7 +67,7 @@ def get_correlation(
 
     # one caveat of using knn from torch_cluster is that it returns only
     # the indices of the neighbors, not the distances. Average knn doesn't
-    # require the distance, but weighted knn does. So we need to compute 
+    # require the distance, but weighted knn does. So we need to compute
     # the distances ourselves. This would increase the computation time
     # but with better implementation, we can save some computation time
 
@@ -200,7 +199,6 @@ def main(cfg_path: str):
             f"Max achievable correlation: {corr} Spearman: {spearman} MSE: {mse}"
         )
 
-
     for model_name in tqdm(cfg.models.names):
         if cfg.checkpoints.read_embeddings:
             logger.info("Reading embeddings")
@@ -282,7 +280,6 @@ def main(cfg_path: str):
                 json.dump(knn_dict_avg, f)
 
             logger.info(f"Saved average scores to {filename_avg}")
-
 
 
 if __name__ == "__main__":

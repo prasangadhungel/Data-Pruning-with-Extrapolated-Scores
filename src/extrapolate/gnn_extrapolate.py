@@ -18,8 +18,8 @@ from tqdm import tqdm
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
+from utils.helpers import parse_config, seed_everything
 from utils.models import load_model_by_name
 
 logger.remove()
@@ -86,15 +86,17 @@ def get_edges_and_attributes(
         logger.info(f"Computing edge attributes using {distance} distance")
         logger.info(f"Length of src: {len(src)}")
         logger.info(f"Length of dst: {len(dst)}")
+        # one caveat of using knn_graph from torch_geometric is that it returns only
+        # the indices of the neighbors, not the distances. In our case the distances are
+        # used as edge attributes. So we need to compute the distances ourselves. With
+        # better implementation of knn_graph, we can get the distances directly, saving
+        # some compute
+
         # only do this if you have large CUDA memory
         # dist = (embeddings[src] - embeddings[dst]).pow(2).sum(dim=-1).sqrt()
-
         # if you have small CUDA memory, do this instead
         chunk_size = 10000
         for i in range(0, len(src), chunk_size):
-            # if i % 200 == 0:
-            #     logger.info(f"Processing chunk {i} to {i + chunk_size}")
-
             chunk_src = src[i : i + chunk_size]
             chunk_dst = dst[i : i + chunk_size]
             chunk_dist = (
@@ -164,7 +166,7 @@ def prepare_data_graph(
 
     if use_labels:
         x = torch.cat((torch.eye(num_classes)[labels].to(device), embeddings), dim=1)
-    
+
     else:
         x = embeddings
 
@@ -213,16 +215,19 @@ def evaluate(
         node_ids = sub_data.n_id[: sub_data.batch_size]
         all_preds[node_ids] = out_root
 
+    # training evaluation is based on subset scores
     pred_train = all_preds[train_mask].detach().cpu().numpy()
     corr_train = np.corrcoef(orig_train, pred_train)[0, 1]
     spearman_train = spearmanr(orig_train, pred_train).correlation
     mse_train = np.mean((orig_train - pred_train) ** 2)
 
+    # val set evaluation is based on subset scores as well
     pred_val = all_preds[val_mask].detach().cpu().numpy()
     corr_val = np.corrcoef(orig_val, pred_val)[0, 1]
     spearman_val = spearmanr(orig_val, pred_val).correlation
     mse_val = np.mean((orig_val - pred_val) ** 2)
 
+    # test set evaluation is based on full scores
     pred_test = all_preds[test_mask].detach().cpu().numpy()
     corr_test = np.corrcoef(orig_test, pred_test)[0, 1]
     spearman_test = spearmanr(orig_test, pred_test).correlation
@@ -424,6 +429,7 @@ def main(cfg_path: str):
                 lr=cfg.hyperparams.lr,
             )
 
+            # train set evaluation is based on subset scores
             orig_train = np.array(
                 [
                     subset_scores_dict[str(i)]
@@ -431,6 +437,8 @@ def main(cfg_path: str):
                     if data.train_mask[i]
                 ]
             )
+
+            # validation set evaluation is based on subset scores
             orig_val = np.array(
                 [
                     subset_scores_dict[str(i)]
@@ -438,6 +446,8 @@ def main(cfg_path: str):
                     if data.val_mask[i]
                 ]
             )
+
+            # test set evaluation is based on full scores
             orig_test = np.array(
                 [
                     full_scores_dict[str(i)]
@@ -635,12 +645,9 @@ def main(cfg_path: str):
             filename = f"{cfg.output.gnn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_euclidean"
 
             date = datetime.datetime.now()
-            filename += f"_{date.month}_{date.day}"
+            filename += f"_{date.month}_{date.day}.json"
 
-            with open(
-                f"{cfg.output.gnn_dict_path}_{cfg.scores.type}_{cfg.dataset.name}_{model_name}_k_{k}_seed_{num_seed}_euclidean.json",
-                "w",
-            ) as f:
+            with open(filename, "w") as f:
                 json.dump(saved_scores, f)
 
             logger.info(f"Saved extrapolated scores to {filename}")

@@ -200,7 +200,11 @@ def get_model(model_name: str, num_classes: int, image_size: int = 224):
         if image_size == 32:
             model = ResNet18_32(num_classes=num_classes)
         elif image_size == 64:
-            model = ResNet18_64(num_classes=num_classes)
+            if num_classes == 1000:
+                model = ResNet18_64(num_classes=num_classes)
+            else:
+                model = resnet18(num_classes=num_classes, image_size=image_size)
+
         else:
             model = resnet18(num_classes=num_classes, image_size=image_size)
 
@@ -208,7 +212,12 @@ def get_model(model_name: str, num_classes: int, image_size: int = 224):
         if image_size == 32:
             model = ResNet50_32(num_classes=num_classes)
         elif image_size == 64:
-            model = ResNet50_64(num_classes=num_classes)
+            if num_classes == 1000:
+                model = ResNet50_64(num_classes=num_classes)
+
+            else:
+                model = resnet50(num_classes=num_classes, image_size=image_size)
+
         else:
             model = resnet50(num_classes=num_classes, image_size=image_size)
 

@@ -11,9 +11,9 @@ from omegaconf import OmegaConf
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import wandb
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
 from utils.evaluate import evaluate, get_top_k_accuracy
+from utils.helpers import parse_config, seed_everything
 from utils.models import get_model
 
 logger.remove()

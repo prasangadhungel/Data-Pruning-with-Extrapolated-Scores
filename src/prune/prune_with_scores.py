@@ -8,8 +8,8 @@ from omegaconf import OmegaConf
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
+from utils.helpers import parse_config, seed_everything
 from utils.prune_utils import prune
 
 logger.remove()
@@ -38,6 +38,7 @@ def main(cfg_path: str):
         scores_dict=importance_score,
         cfg=cfg,
         wandb_name=cfg.wandb_name,
+        rebalance_labels=cfg.pruning.rebalance_labels,
         device=device,
     )
 
