@@ -141,6 +141,11 @@ def main(cfg_path: str):
             nesterov=cfg.training.nesterov,
         )
 
+        num_iter = len(train_loader)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer=optimizer, T_max=cfg.pruning.num_epochs * num_iter
+        )
+
         criterion = torch.nn.CrossEntropyLoss()
         model.cuda()
         criterion.cuda()
@@ -189,6 +194,7 @@ def main(cfg_path: str):
                 train_losses.append(loss)
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
                 if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
                     logger.info(
@@ -261,7 +267,7 @@ def main(cfg_path: str):
                 test_loader=test_loader,
                 scores_dict=tdds_score,
                 cfg=cfg,
-                wandb_name="tdds-last-",
+                wandb_name="tdds-last-scheduler-",
                 device=device,
             )
 
