@@ -88,3 +88,16 @@ python src/prune/prune_with_scores.py
 ```
 
 The script will apply various pruning strategies using the provided scores and report performance metrics.
+
+
+If you find this work useful please cite:
+```
+@article{schmidt2025effective,
+author = {Schmidt, Sebastian and Dhungel, Prasanga and Löffler, Christoffer and Nieth, Björn and Günnemann, Stephan and Schwinn, Leo},
+year = {2025},
+month = {06},
+pages = {},
+title = {Effective Data Pruning through Score Extrapolation},
+doi = {10.48550/arXiv.2506.09010}
+}
+```
