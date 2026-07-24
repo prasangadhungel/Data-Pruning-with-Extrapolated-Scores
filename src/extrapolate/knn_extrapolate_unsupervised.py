@@ -107,7 +107,7 @@ def get_datasets(dataset, transform, root_dir="./data"):
         )
     elif dataset == "SYNTHETIC_CIFAR100_1M":
         data = np.load(
-            "/nfs/homedirs/dhp/unsupervised-data-pruning/data/cifar100_1m.npz"
+            "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/data/cifar100_1m.npz"
         )
 
         num_samples = len(data["label"])

@@ -144,7 +144,7 @@ def main(cfg_path: str):
 
 if __name__ == "__main__":
     default_config_path = os.path.join(
-        os.path.dirname(__file__), "configs", "random_prune_config.yaml"
+        "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/src/prune/configs/random_prune_config.yaml"
     )
     config_path = parse_config(
         default_config=default_config_path, description="Run Random Pruning"

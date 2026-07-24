@@ -36,7 +36,7 @@ CIFAR10:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
 
 
 SYNTHETIC_CIFAR100_1M:
@@ -76,7 +76,7 @@ SYNTHETIC_CIFAR100_1M:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
 
 PLACES_365:
   experiment:
@@ -115,7 +115,7 @@ PLACES_365:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
 
 IMAGENET:
   experiment:
@@ -130,7 +130,7 @@ IMAGENET:
     name: "ResNet18"
 
   training:
-    batch_size: 256
+    batch_size: 1024
     num_epochs: 90
     lr: 0.001
     weight_decay: 0.0001
@@ -154,4 +154,4 @@ IMAGENET:
     log_interval: 45000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"

@@ -18,8 +18,8 @@ from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.helpers import parse_config, seed_everything
 from utils.dataset import prepare_data
+from utils.helpers import parse_config, seed_everything
 from utils.models import load_model_by_name
 
 logger.remove()
@@ -632,7 +632,7 @@ def main(cfg_path: str):
 
 if __name__ == "__main__":
     default_config_path = os.path.join(
-        "/nfs/homedirs/dhp/unsupervised-data-pruning/src/extrapolate/configs/gnn_config.yaml"
+        "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/src/extrapolate/configs/gnn_config.yaml"
     )
     config_path = parse_config(
         default_config=default_config_path, description="Run GNN Extrapolation"

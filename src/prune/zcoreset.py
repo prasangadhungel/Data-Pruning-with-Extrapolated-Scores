@@ -15,7 +15,7 @@ from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
 # Add your src folder for prune/utils
-sys.path.append("/nfs/homedirs/dhp/unsupervised-data-pruning/src")
+sys.path.append("/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/src")
 
 from utils.dataset import prepare_data
 from utils.helpers import parse_config, seed_everything

@@ -1,30 +1,138 @@
+CIFAR10:
+  experiment:
+    num_iterations: 1
+
+  dataset:
+    name: "CIFAR10"
+    num_classes: 10
+    partial: true
+    subset: ["train"]
+
+  model:
+    name: "ResNet18"
+
+  training:
+    batch_size: 128
+    num_epochs: 4
+    lr: 0.001
+    weight_decay: 0.001
+
+  uncertainty:
+    num_ensembles: 2
+    prune_epochs: 2
+
+  pruning:
+    percentages: [0.1, 0.2, 0.5]
+
+  logging:
+    log_interval: 1000
 experiment:
   num_iterations: 1
 
-dataset:
-  name: "SYNTHETIC_CIFAR100_1M"
-  num_classes: 100
-  partial: true
-  subset: ["train"]
+SYNTHETIC_CIFAR100_1M:
+  dataset:
+    name: "SYNTHETIC_CIFAR100_1M"
+    num_classes: 100
+    partial: true
+    subset: ["train"]
 
-model:
-  name: "ResNet50"
+  model:
+    name: "ResNet50"
 
-training:
-  batch_size: 256
-  num_epochs: 4
-  lr: 0.001
-  weight_decay: 0.001
+  training:
+    batch_size: 256
+    num_epochs: 4
+    lr: 0.001
+    weight_decay: 0.001
 
-uncertainty:
-  num_ensembles: 2
-  prune_epochs: 2
+  uncertainty:
+    num_ensembles: 3
+    prune_epochs: 25
 
-pruning:
-  percentages: [0.1, 0.2, 0.5]
+  pruning:
+    percentages: [0.1, 0.2, 0.5]
 
-logging:
-  log_interval: 1000
+  logging:
+    log_interval: 1000
 
-paths:
-  scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores"
+  paths:
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores"
+
+PLACES_365:
+  experiment:
+    num_iterations: 1
+
+  dataset:
+    name: "PLACES_365"
+    num_classes: 365
+    image_size: 64
+    for_extrapolation:
+      value: false
+      # subset_size: 450000
+      subset_size: 360692
+
+  model:
+    name: "ResNet50"
+
+  training:
+    batch_size: 128
+    num_epochs: 50
+    lr: 0.001
+    weight_decay: 0.001
+
+  uncertainty:
+    num_ensembles: 3
+    prune_epochs: 25
+
+
+  pruning:
+    prune: true
+    percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
+
+  logging:
+    log_interval: 15000
+
+  paths:
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/places365/subset_data"
+
+IMAGENET:
+  experiment:
+    num_iterations: 1
+
+  dataset:
+    name: "IMAGENET"
+    num_classes: 1000
+    image_size: 64
+    for_extrapolation:
+      value: true
+      # value: false
+      subset_size: 256234
+      # subset_size: 64058
+      # subset_size: 128117
+
+  model:
+    # name: "ResNet18"
+    name: "ResNet50"
+
+  training:
+    batch_size: 256
+    num_epochs: 90
+    lr: 0.001
+    weight_decay: 0.0001
+
+  uncertainty:
+    num_ensembles: 2
+    prune_epochs: 2
+
+
+  pruning:
+    prune: false
+    percentages: [0.1, 0.2, 0.5, 0.8, 0.9, 0.95]
+
+  logging:
+    log_interval: 45000
+
+  paths:
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/imagenet/full_data"

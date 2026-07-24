@@ -83,7 +83,8 @@ IMAGENET:
     image_size: 64
 
   model:
-    name: "ResNet18"
+    # name: "ResNet18"
+    name: "ResNet50"
 
   training:
     batch_size: 256

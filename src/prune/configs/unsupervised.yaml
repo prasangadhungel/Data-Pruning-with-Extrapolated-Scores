@@ -14,7 +14,7 @@ CIFAR10:
 
   model:
     name: "dinov2"
-    path: "/nfs/homedirs/dhp/turtle/data/checkpoints/dinov2"
+    path: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/turtle/data/checkpoints/dinov2"
     torch_hub: "facebookresearch/dinov2"
     version: "dinov2_vitg14"
 
@@ -40,7 +40,7 @@ CIFAR10:
     window: 10
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
-    softmax_dir: "/nfs/homedirs/dhp/unsupervised-data-pruning/checkpoints/CIFAR10/subset_data"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/subset"
+    softmax_dir: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/checkpoints/CIFAR10/subset_data"
     save_softmax: false
     read_softmax: false

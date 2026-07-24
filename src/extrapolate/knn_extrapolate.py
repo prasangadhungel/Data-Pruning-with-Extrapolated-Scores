@@ -44,7 +44,7 @@ def get_correlation(
     )
 
     unseed_scores_true = torch.tensor(
-        [full_scores_dict[str(u)] for u in unseeded_samples],
+        [full_scores_dict.get(str(u), 0.0) for u in unseeded_samples],
         dtype=torch.float,
         device=device,
     )
@@ -132,7 +132,7 @@ def get_correlation(
 
 def main(cfg_path: str):
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.IMAGENET
+    cfg = cfg.PLACES_365
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Dataset: {cfg.dataset.name}, Device: {device}")

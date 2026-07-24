@@ -1,0 +1,265 @@
+import torch
+
+class CoresetSelection(object):
+    @staticmethod
+    def score_monotonic_selection(data_score, key, ratio, descending, class_balanced):
+        score = data_score[key]
+        score_sorted_index = score.argsort(descending=descending)
+        total_num = ratio * data_score['targets'].shape[0]
+
+        if class_balanced:
+            print('Class balance mode.')
+            all_index = torch.arange(data_score['targets'].shape[0])
+            #Permutation
+            targets_list = data_score['targets'][score_sorted_index]
+            targets_unique = torch.unique(targets_list)
+            for target in targets_unique:
+                target_index_mask = (targets_list == target)
+                targets_num = target_index_mask.sum()
+
+            #Guarantee the class ratio doesn't change
+            selected_index = []
+            for target in targets_unique:
+                target_index_mask = (targets_list == target)
+                target_index = all_index[target_index_mask]
+                target_coreset_num = targets_num * ratio
+                selected_index = selected_index + list(target_index[:int(target_coreset_num)])
+            selected_index = torch.tensor(selected_index)
+            print(f'High priority {key}: {score[score_sorted_index[selected_index][:15]]}')
+            print(f'Low priority {key}: {score[score_sorted_index[selected_index][-15:]]}')
+
+            return score_sorted_index[selected_index]
+
+        else:
+            print(f'High priority {key}: {score[score_sorted_index[:15]]}')
+            print(f'Low priority {key}: {score[score_sorted_index[-15:]]}')
+            return score_sorted_index[:int(total_num)]
+
+    @staticmethod
+    def mislabel_mask(data_score, mis_key, mis_num, mis_descending, coreset_key):
+        mis_score = data_score[mis_key]
+        mis_score_sorted_index = mis_score.argsort(descending=mis_descending)
+        hard_index = mis_score_sorted_index[:mis_num]
+        print(f'Bad data -> High priority {mis_key}: {data_score[mis_key][hard_index][:15]}')
+        print(f'Prune {hard_index.shape[0]} samples.')
+
+        easy_index = mis_score_sorted_index[mis_num:]
+        data_score[coreset_key] = data_score[coreset_key][easy_index]
+
+        return data_score, easy_index
+
+
+    @staticmethod
+    def stratified_sampling(data_score, coreset_key, coreset_num):
+        stratas = 50
+        print('Using stratified sampling...')
+        score = data_score[coreset_key]
+        total_num = coreset_num
+
+        min_score = torch.min(score)
+        max_score = torch.max(score) * 1.0001
+        step = (max_score - min_score) / stratas
+
+        def bin_range(k):
+            return min_score + k * step, min_score + (k + 1) * step
+
+        strata_num = []
+        ##### calculate number for each strata #####
+        for i in range(stratas):
+            start, end = bin_range(i)
+            num = torch.logical_and(score >= start, score < end).sum()
+            strata_num.append(num)
+
+        strata_num = torch.tensor(strata_num)
+
+        def bin_allocate(num, bins):
+            sorted_index = torch.argsort(bins)
+            sort_bins = bins[sorted_index]
+
+            num_bin = bins.shape[0]
+
+            rest_exp_num = num
+            budgets = []
+            for i in range(num_bin):
+                rest_bins = num_bin - i
+                avg = rest_exp_num // rest_bins
+                cur_num = min(sort_bins[i].item(), avg)
+                budgets.append(cur_num)
+                rest_exp_num -= cur_num
+
+
+            rst = torch.zeros((num_bin,)).type(torch.int)
+            rst[sorted_index] = torch.tensor(budgets).type(torch.int)
+
+            return rst
+
+        budgets = bin_allocate(total_num, strata_num)
+
+        ##### sampling in each strata #####
+        selected_index = []
+        sample_index = torch.arange(data_score[coreset_key].shape[0])
+
+        for i in range(stratas):
+            start, end = bin_range(i)
+            mask = torch.logical_and(score >= start, score < end)
+            pool = sample_index[mask]
+            rand_index = torch.randperm(pool.shape[0])
+            selected_index += [idx.item() for idx in pool[rand_index][:budgets[i]]]
+
+        return selected_index, None
+
+    @staticmethod
+    def random_selection(total_num, num):
+        print('Random selection.')
+        score_random_index = torch.randperm(total_num)
+
+        return score_random_index[:int(num)]
+
+
+def prune(
+    trainset,
+    test_loader,
+    scores_dict,
+    cfg,
+    wandb_name,
+    rebalance_labels=False,
+    device="cuda",
+    sampling_method="ccs",
+    pred_mean=None,
+    mu_d=None,
+    mis_ratio=0.3
+):
+    """
+    Prune the dataset based on the uncertainty scores.
+    """
+    if sampling_method != "ccs":
+        score_vector = np.array(list(scores_dict.values()))
+        sorted_importance_scores = {
+            k: v
+            for k, v in sorted(scores_dict.items(), key=lambda item: item[1], reverse=True)
+        }
+
+    for prune_percentage in cfg.pruning.percentages:
+        str_prune_percentage = str(int(prune_percentage * 100))
+        wandb.init(
+            project=cfg.dataset.name,
+            name=wandb_name + str_prune_percentage,
+        )
+        wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
+
+        if not rebalance_labels:
+            if sampling_method == "topk":
+                top_samples = list(sorted_importance_scores.keys())[
+                    : int((1 - prune_percentage) * len(sorted_importance_scores))
+                ]
+                indices_to_keep = [int(s) for s in top_samples]
+
+            elif sampling_method == "beta":
+                chosen = beta_sampling(
+                    prune_percentage=prune_percentage,
+                    pred_mean=pred_mean,
+                    mu_d=mu_d,
+                    c_d=4.0,
+                    score_vector=score_vector
+                )
+                indices_to_keep = chosen.tolist()
+            elif sampling_method == "ccs":
+                mis_num = int(args.mis_ratio * total_num)
+                data_score, score_index = CoresetSelection.mislabel_mask(data_score, mis_key='accumulated_margin', mis_num=mis_num, mis_descending=False, coreset_key='accumulated_margin')
+
+                coreset_num = int(prune_percentage * total_num)
+                coreset_index, _ = CoresetSelection.stratified_sampling(data_score=data_score, coreset_key='accumulated_margin', coreset_num=coreset_num)
+                coreset_index = score_index[coreset_index]
+                indices_to_keep = coreset_index.tolist()
+            else:
+                raise ValueError(f"Unknown sampling method: {sampling_method}")
+
+        else:
+            # sort based on the labels and then prune the dataset
+            # considering stratified sampling based on the labels
+            label_to_indices = defaultdict(list)
+            for idx in range(len(trainset)):
+                _, label, sample_idx = trainset[
+                    idx
+                ]  # assuming trainset returns (img, label, sample_idx)
+                label_to_indices[label].append(sample_idx)
+
+            # Perform stratified pruning
+            indices_to_keep = []
+
+            for label, indices in label_to_indices.items():
+                # Sort these indices by their importance score (descending)
+                indices.sort(key=lambda x: sorted_importance_scores[x], reverse=True)
+
+                # Keep top (1 - prune_percentage) of them
+                retain_count = int((1 - prune_percentage) * len(indices))
+                indices_to_keep.extend(indices[:retain_count])
+
+        pruned_trainset = torch.utils.data.Subset(trainset, indices_to_keep)
+
+        trainloader = torch.utils.data.DataLoader(
+            pruned_trainset,
+            batch_size=cfg.training.batch_size,
+            shuffle=True,
+            num_workers=2,
+        )
+
+        # Initialize the ConvNet model
+        net = get_model(
+            cfg.model.name,
+            num_classes=cfg.dataset.num_classes,
+            image_size=cfg.dataset.image_size,
+        ).to(device)
+        # Define the loss function and optimizer
+        optimizer = optim.Adam(
+            net.parameters(),
+            lr=cfg.training.lr,
+            weight_decay=cfg.training.weight_decay,
+        )
+        scheduler = optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=cfg.training.lr,
+            epochs=cfg.training.num_epochs,
+            steps_per_epoch=len(trainloader),
+        )
+
+        torch.cuda.empty_cache()
+        start_time = time.time()
+        for epoch in range(cfg.training.num_epochs):
+            net.train()
+            train_losses = []
+            for i, data in enumerate(trainloader):
+                inputs, labels, _ = data
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = net(inputs)
+                loss = torch.nn.functional.cross_entropy(outputs, labels)
+                optimizer.zero_grad()
+                train_losses.append(loss)
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+
+            test_acc = evaluate(net, test_loader, device)
+            train_loss = torch.stack(train_losses).mean().item()
+
+            wandb.log({"Loss": train_loss}, step=epoch)
+            wandb.log({"Accuracy": test_acc}, step=epoch)
+            logger.info(
+                f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Acc: {test_acc:.5f}"
+            )
+
+        end_time = time.time()
+        training_time = end_time - start_time
+
+        accuracy, top5_accuracy = get_top_k_accuracy(net, test_loader, device, k=5)
+
+        wandb.log = {
+            "Final-Accuracy": accuracy,
+            "Top-5 Accuracy": top5_accuracy,
+            "Training Time": training_time,
+        }
+        logger.info(
+            f"Final Accuracy: {accuracy:.5f}, Top-5 Accuracy: {top5_accuracy:.5f}"
+        )
+
+        wandb.finish()

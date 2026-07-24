@@ -1,0 +1,30 @@
+PLACES_365:
+  experiment:
+    num_iterations: 1
+
+  dataset:
+    name: "PLACES_365"
+    num_classes: 365
+    image_size: 64
+
+  model:
+    name: "ResNet50"
+
+  training:
+    batch_size: 128
+    num_epochs: 50
+    lr: 0.001
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
+
+  pruning:
+    rebalance_labels: false
+    percentages: [0.8, 0.9, 0.95]
+
+  logging:
+    log_interval: 15000
+
+  is_subset: true
+  json_path: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_el2n_PLACES_365_avg_resnet50-self-trained_k_50_seed_360692_euclidean__3_30.json"
+  wandb_name: "subset-pruning-places365-"

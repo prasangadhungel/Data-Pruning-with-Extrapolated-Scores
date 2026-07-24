@@ -23,8 +23,8 @@ CIFAR10:
   logging:
     log_interval: 15000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_tdds_CIFAR10_resnet18-self-trained_k_20_seed_20000_euclidean_5_12.json"
-  wandb_name: "gnn-tdds-k-20-seed-20000-"
+  json_path: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune/cifar10_zcoreset_0_5_26.json"
+  wandb_name: "zcoreset-"
 
 SYNTHETIC_CIFAR100_1M:
   experiment:
@@ -51,7 +51,7 @@ SYNTHETIC_CIFAR100_1M:
   logging:
     log_interval: 15000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_extrapolation_SYNTHETIC_CIFAR100_1M_resnet50-self-trained_k_50_seed_100000_euclidean.json"
+  json_path: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/extrapolated/knn_extrapolation_SYNTHETIC_CIFAR100_1M_resnet50-self-trained_k_50_seed_100000_euclidean.json"
   wandb_name: "gnn-DU-k-50-seed-100000-"
 
 PLACES_365:
@@ -79,7 +79,7 @@ PLACES_365:
   logging:
     log_interval: 15000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_extrapolation_DU_PLACES_365_resnet50-self-trained_k_10_seed_180000_euclidean.json"
+  json_path: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn_extrapolation_DU_PLACES_365_resnet50-self-trained_k_10_seed_180000_euclidean.json"
   wandb_name: "gnn-DU-k-10-seed-450000-"
 
 IMAGENET:
@@ -107,5 +107,5 @@ IMAGENET:
   logging:
     log_interval: 45000
 
-  json_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/IMAGENET_tdds_first_0_5_1.json"
+  json_path: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune/IMAGENET_tdds_first_0_5_1.json"
   wandb_name: "tdds-first-rebalanced-"

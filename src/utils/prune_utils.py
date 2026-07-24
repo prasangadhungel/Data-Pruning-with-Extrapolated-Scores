@@ -8,10 +8,12 @@ import torch
 import torch.optim as optim
 from loguru import logger
 from omegaconf import OmegaConf
+from scipy.stats import beta
 
 import wandb
 from utils.evaluate import evaluate, get_top_k_accuracy
 from utils.models import get_model
+from utils.ccs_coreset import CoresetSelection
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
@@ -81,6 +83,31 @@ def get_error(model, X, target, num_classes=10):
     scores = scores.cpu().detach().numpy()
     return scores
 
+def beta_sampling(prune_percentage, pred_mean, mu_d, c_d, score_vector):
+    num_samples = score_vector.shape[0]
+    logger.info(f"Beta sampling num_samples: {num_samples}")
+    keep_n = int((1 - prune_percentage) * num_samples)
+
+    # Anchor mean = mean of last 10 most uncertain samples in mask
+    anchor_mean = mu_d
+
+    y_b = 15 * (1 - anchor_mean) * (1 - prune_percentage ** c_d)
+    y_a = 16 - y_b
+
+    pdf_y = beta.pdf(pred_mean, y_a, y_b)
+
+    # Combine Beta density + uncertainty score
+    joint_p = pdf_y * score_vector
+    joint_p = joint_p / joint_p.sum()
+
+    # Sample WITHOUT replacement
+    subset_indices = np.random.choice(
+        num_samples, 
+        size=keep_n, 
+        replace=False, 
+        p=joint_p
+    )
+    return subset_indices
 
 def prune(
     trainset,
@@ -90,10 +117,14 @@ def prune(
     wandb_name,
     rebalance_labels=False,
     device="cuda",
+    sampling_method="topk",
+    pred_mean=None,
+    mu_d=None,
 ):
     """
     Prune the dataset based on the uncertainty scores.
     """
+    score_vector = np.array(list(scores_dict.values()))
     sorted_importance_scores = {
         k: v
         for k, v in sorted(scores_dict.items(), key=lambda item: item[1], reverse=True)
@@ -108,12 +139,31 @@ def prune(
         wandb.config.update(OmegaConf.to_container(cfg, resolve=True))
 
         if not rebalance_labels:
-            # sort the uncertainty scores in descending order and get the indices of most uncertain samples
-            top_samples = list(sorted_importance_scores.keys())[
-                : int((1 - prune_percentage) * len(sorted_importance_scores))
-            ]
-            # Get the indices of the top samples
-            indices_to_keep = [int(sample) for sample in top_samples]
+            if sampling_method == "topk":
+                top_samples = list(sorted_importance_scores.keys())[
+                    : int((1 - prune_percentage) * len(sorted_importance_scores))
+                ]
+                indices_to_keep = [int(s) for s in top_samples]
+
+            elif sampling_method == "beta":
+                chosen = beta_sampling(
+                    prune_percentage=prune_percentage,
+                    pred_mean=pred_mean,
+                    mu_d=mu_d,
+                    c_d=4.0,
+                    score_vector=score_vector
+                )
+                indices_to_keep = chosen.tolist()
+            elif sampling_method == "ccs":
+                mis_num = int(args.mis_ratio * total_num)
+                data_score, score_index = CoresetSelection.mislabel_mask(data_score, mis_key='accumulated_margin', mis_num=mis_num, mis_descending=False, coreset_key=args.coreset_key)
+
+                coreset_num = int(args.coreset_ratio * total_num)
+                coreset_index, _ = CoresetSelection.stratified_sampling(data_score=data_score, coreset_key=args.coreset_key, coreset_num=coreset_num)
+                coreset_index = score_index[coreset_index]
+                indices_to_keep = coreset_index.tolist()
+            else:
+                raise ValueError(f"Unknown sampling method: {sampling_method}")
 
         else:
             # sort based on the labels and then prune the dataset

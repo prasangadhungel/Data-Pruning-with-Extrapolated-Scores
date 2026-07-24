@@ -60,7 +60,7 @@ def main(cfg_path: str):
     seed_everything(42)
 
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.PLACES_365
+    cfg = cfg.SYNTHETIC_CIFAR100_1M
     logger.info("RS2 Pruning")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(

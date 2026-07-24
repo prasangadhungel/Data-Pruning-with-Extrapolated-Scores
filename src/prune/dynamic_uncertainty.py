@@ -17,6 +17,7 @@ from utils.evaluate import evaluate
 from utils.helpers import parse_config, seed_everything
 from utils.models import get_model
 from utils.prune_utils import calculate_uncertainty, prune
+from collections import defaultdict
 
 logger.remove()
 logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
@@ -29,7 +30,7 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
         num_classes=cfg.dataset.num_classes,
         image_size=cfg.dataset.image_size,
     ).to(device)
-    optimizer = Adam(model.parameters(), lr=cfg.training.lr)
+    optimizer = Adam(model.parameters(), lr=0.0008)
 
     # Initialize variables
     uncertainty_window = cfg.uncertainty.window
@@ -100,10 +101,10 @@ def get_dynamic_uncertainty_scores(cfg, device, trainset, train_loader, test_loa
 
 
 def main(cfg_path: str):
-    seed_everything(42)
+    seed_everything(40)
 
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.SYNTHETIC_CIFAR100_1M
+    cfg = cfg.IMAGENET
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
@@ -111,9 +112,35 @@ def main(cfg_path: str):
     logger.info(f"Loaded dataset: {cfg.dataset.name}, Device: {device}")
 
     if cfg.dataset.for_extrapolation.value is True:
-        indices_to_keep = random.sample(
-            range(num_samples), cfg.dataset.for_extrapolation.subset_size
-        )
+        # Group indices by class
+        class_indices = defaultdict(list)
+        for idx in range(len(trainset)):
+            # Each element is assumed to be (data, target, sample_idx)
+            _, target, _ = trainset[idx]
+            class_indices[target].append(idx)
+
+        total_subset_size = cfg.dataset.for_extrapolation.subset_size
+        # Compute stratified sample sizes for each class based on proportions
+        indices_to_keep = []
+        for cls, indices in class_indices.items():
+            proportion = len(indices) / num_samples
+            # Determine the number of samples to pick for the class
+            n_samples = max(1, int(round(proportion * total_subset_size)))
+            n_samples = min(n_samples, len(indices))  # do not exceed available indices
+            selected = random.sample(indices, n_samples)
+            indices_to_keep.extend(selected)
+
+        # Adjust if total samples differ from expected subset_size
+        if len(indices_to_keep) > total_subset_size:
+            indices_to_keep = random.sample(indices_to_keep, total_subset_size)
+        elif len(indices_to_keep) < total_subset_size:
+            # Fill the remaining slots randomly from unselected indices
+            all_indices = set(range(num_samples))
+            remaining = list(all_indices - set(indices_to_keep))
+            if len(remaining) >= (total_subset_size - len(indices_to_keep)):
+                indices_to_keep.extend(random.sample(remaining, total_subset_size - len(indices_to_keep)))
+            else:
+                indices_to_keep.extend(remaining)
 
         trainset = torch.utils.data.Subset(trainset, indices_to_keep)
         train_loader = torch.utils.data.DataLoader(

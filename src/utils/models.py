@@ -213,7 +213,8 @@ def get_model(model_name: str, num_classes: int, image_size: int = 224):
             model = ResNet50_32(num_classes=num_classes)
         elif image_size == 64:
             if num_classes == 1000:
-                model = ResNet50_64(num_classes=num_classes)
+                # model = ResNet50_64(num_classes=num_classes)
+                model = resnet50(num_classes=num_classes, image_size=image_size)
 
             else:
                 model = resnet50(num_classes=num_classes, image_size=image_size)
@@ -262,7 +263,8 @@ def load_model_by_name(
             model_path=path,
             device=device,
         )
-        embedding_model = ResNetEmbedding(model).to(device)
+        # embedding_model = ResNetEmbedding(model).to(device)
+        embedding_model = model.to(device)
 
     elif model_name == "resnet18-self-trained":
         model = load_model(
@@ -272,7 +274,8 @@ def load_model_by_name(
             model_path=path,
             device=device,
         )
-        embedding_model = ResNetEmbedding(model).to(device)
+        # embedding_model = ResNetEmbedding(model).to(device)
+        embedding_model = model.to(device)
 
     elif model_name == "resnet18":
         weights = ResNet18_Weights.DEFAULT

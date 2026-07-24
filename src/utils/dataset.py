@@ -48,18 +48,6 @@ class IndexDataset(Dataset):
         return (item[0], item[1], idx)
 
 
-class IndexDatasetWithLabels(Dataset):
-    def __init__(self, dataset: Dataset, labels) -> None:
-        for name, param in dataset.__dict__.items():
-            self.__setattr__(name, param)
-        for method in inspect.getmembers(dataset, predicate=inspect.ismethod):
-            self.__setattr__(method[0], method[1])
-        for method in inspect.getmembers(dataset, predicate=inspect.isfunction):
-            self.__setattr__(method[0], method[1])
-        self.dataset = dataset
-        self.labels = labels
-
-
 class CustomDataset(Dataset):
     def __init__(self, images, labels, transform=None, reshape=False):
         self.images = images
@@ -274,7 +262,7 @@ def get_dataset(dataset_name: str):
         std_cifar100_syn = (0.2748, 0.2640, 0.2858)
 
         data = np.load(
-            "/nfs/homedirs/dhp/unsupervised-data-pruning/data/cifar100_1m.npz"
+            "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/data/cifar100_1m.npz"
         )
 
         num_samples = len(data["label"])

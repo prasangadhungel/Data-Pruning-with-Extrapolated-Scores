@@ -1,14 +1,14 @@
 CIFAR10:
   experiment:
-    num_iterations: 2
+    num_iterations: 3
 
   dataset:
     name: "CIFAR10"
     num_classes: 10
     image_size: 32
     for_extrapolation:
-      # value: false
-      value: true
+      value: false
+      # value: true
       subset_size: 10000
 
   model:
@@ -23,8 +23,8 @@ CIFAR10:
     nesterov: true
 
   pruning:
-    # prune: true
-    prune: false
+    prune: true
+    # prune: false
     window: 10
     num_epochs: 50
     trajectory: 10
@@ -35,10 +35,10 @@ CIFAR10:
     log_interval: 15000
 
   paths:
-    # scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
-    # models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/full_data"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/CIFAR10/subset_data"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
+    # scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/CIFAR10/full_data"
+    # models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/CIFAR10/subset_data"
 
 
 SYNTHETIC_CIFAR100_1M:
@@ -70,14 +70,14 @@ SYNTHETIC_CIFAR100_1M:
     num_epochs: 50
     trajectory: 10
     decay: 0.9
-    percentages: [0.95, 0.95, 0.8, 0.5, 0.2, 0.1]
+    percentages: [0.95, 0.90, 0.8, 0.5, 0.2, 0.1]
 
   logging:
     log_interval: 15000
 
   paths:
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/full_data"
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M/full_data"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
 
 
 PLACES_365:
@@ -89,8 +89,10 @@ PLACES_365:
     num_classes: 365
     image_size: 64
     for_extrapolation:
-      value: true
-      subset_size: 450000
+      value: false
+      # value: true
+      # subset_size: 450000
+      subset_size: 360692
 
   model:
     name: "ResNet50"
@@ -104,9 +106,10 @@ PLACES_365:
     nesterov: true
 
   pruning:
-    prune: false
+    prune: true
+    # prune: false
     window: 10
-    num_epochs: 50
+    num_epochs: 35
     trajectory: 10
     decay: 0.9
     percentages: [0.95, 0.95, 0.8, 0.5, 0.2, 0.1]
@@ -115,12 +118,14 @@ PLACES_365:
     log_interval: 15000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/places365/subset_data"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
+    # scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/extrapolation/subset"
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/places365/full_data"
+    # models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/places365/subset_data"
 
 IMAGENET:
   experiment:
-    num_iterations: 1
+    num_iterations: 2
 
   dataset:
     name: "IMAGENET"
@@ -128,11 +133,13 @@ IMAGENET:
     image_size: 64
     for_extrapolation:
       value: false
+      # value: true
       subset_size: 256234
       # subset_size: 128117
 
   model:
-    name: "ResNet18"
+    # name: "ResNet18"
+    name: "ResNet50"
 
   training:
     batch_size: 256
@@ -145,7 +152,7 @@ IMAGENET:
   pruning:
     prune: true
     window: 10
-    num_epochs: 90
+    num_epochs: 35
     trajectory: 10
     decay: 0.9
     percentages: [0.95, 0.9, 0.8, 0.5, 0.2, 0.1]
@@ -154,5 +161,5 @@ IMAGENET:
     log_interval: 45000
 
   paths:
-    scores: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune"
-    models: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/imagenet/full_data"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/imagenet/full_data"
