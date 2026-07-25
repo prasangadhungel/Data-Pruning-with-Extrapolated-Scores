@@ -20,6 +20,23 @@ Self-test:
     python analysis/longtail_fidelity.py --smoke
 """
 
+# ---------------------------------------------------------------------------
+# DATA TO LOAD (real run). Root on the shared store:
+#   ROOT = /ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning
+#   (older mirror: /nfs/homedirs/dhp/unsupervised-data-pruning)
+# This script needs full scores S + an extrapolated score dict + labels.
+# Prefer SYNTHETIC_CIFAR100_1M (100 classes) so head/tail is meaningful:
+#   --full_scores         ROOT/scores/prune/SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0.json  (= S)
+#   --extrapolated_scores ROOT/scores/extrapolation/extrapolated/
+#                         gnn_extrapolation_SYNTHETIC_CIFAR100_1M_resnet50-self-trained_k_10_seed_200000_euclidean.json
+#                         (or knn_extrapolation_SYNTHETIC_CIFAR100_1M_..._k_50_seed_200000_euclidean.json)
+#   --labels  SYNTHETIC_CIFAR100_1M_labels.npy  -- NOT stored with the scores. Dump
+#             once from utils.dataset.prepare_data(cfg.dataset) (returns per-sample labels).
+# The LT index set is built in-memory by lt_utils.make_longtail_indices(labels, imb_factor);
+# no separate long-tail data file is needed. Other datasets: swap the DS name in
+# scores/prune/<DS>_*.json and scores/extrapolation/extrapolated/{gnn,knn}_*<DS>_*.json.
+# ---------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import argparse

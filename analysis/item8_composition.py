@@ -15,6 +15,26 @@ Self-test:
     python analysis/item8_composition.py --smoke
 """
 
+# ---------------------------------------------------------------------------
+# DATA TO LOAD (real run). Root on the shared store:
+#   ROOT = /ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning
+#   (older mirror: /nfs/homedirs/dhp/unsupervised-data-pruning)
+# This script needs full scores S + an extrapolated score dict + labels:
+#   --full_scores         ROOT/scores/prune/CIFAR10_dynamic_uncertainty_0.json          (= S)
+#   --extrapolated_scores ROOT/scores/extrapolation/extrapolated/
+#                         gnn_DU_CIFAR10_resnet50-self-trained_k_10_seed_20000_euclidean.json
+#     Extrapolated dicts on disk (gnn / knn):
+#       IMAGENET  : gnn__du_IMAGENET_..._k_50_seed_256234_euclidean.json,
+#                   gnn__tdds_IMAGENET_..._k_10_seed_256234_euclidean_4_27.json
+#       PLACES_365: gnn_extrapolation_DU_PLACES_365_..._k_10_seed_450000_euclidean.json,
+#                   gnn_tdds_PLACES_365_..._k_10_seed_450000_euclidean.json,
+#                   knn_extrapolation_PLACES_365_..._k_50_seed_450000_euclidean.json
+#       SYNTH_100M: gnn_extrapolation_SYNTHETIC_CIFAR100_1M_..._k_10_seed_200000_euclidean.json,
+#                   knn_extrapolation_SYNTHETIC_CIFAR100_1M_..._k_50_seed_200000_euclidean.json
+#   --labels  <DS>_labels.npy  -- NOT stored with the scores. Dump once from
+#             utils.dataset.prepare_data(cfg.dataset) (it returns per-sample labels).
+# ---------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import argparse

@@ -19,6 +19,26 @@ Self-test:
     python analysis/item2_behavior_preservation.py --smoke
 """
 
+# ---------------------------------------------------------------------------
+# DATA TO LOAD (real run). Root on the shared store:
+#   ROOT = /ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning
+#   (older mirror: /nfs/homedirs/dhp/unsupervised-data-pruning)
+# This script compares the DOWNSTREAM behaviour of two pruned models:
+#   --pred_gt     predictions of a model trained on the GT-score-pruned set
+#   --pred_ext    predictions of a model trained on the extrapolation-pruned set
+# Each is an .npz with arrays {sample_idx, label, pred} over the SAME test set.
+#
+# NOTE: these two checkpoints DO NOT EXIST yet. Only proxy checkpoints are on disk
+#   (ROOT/models/<DS>/full_data/dual_model.pth and
+#    ROOT/models/<DS>/subset_data/<metric>_<seed>.pth, e.g. CIFAR10
+#    dynamic_uncertainty_10000.pth, imagenet dynamic_uncertainty_256234.pth /
+#    tdds_256234.pth) -- NOT the pruned-downstream models this item needs.
+# To produce them (Tier-C, needs GPU): run src/prune/prune_with_scores.py at a fixed
+# prune rate twice -- once with the GT score dict (scores/prune/<DS>_*.json), once with
+# the extrapolated dict (scores/extrapolation/extrapolated/{gnn,knn}_*<DS>_*.json) --
+# then evaluate each on the test set and dump {sample_idx,label,pred} to the npz above.
+# ---------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import argparse

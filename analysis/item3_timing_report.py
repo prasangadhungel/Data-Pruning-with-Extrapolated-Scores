@@ -23,6 +23,30 @@ Self-test:
     python analysis/item3_timing_report.py --smoke
 """
 
+# ---------------------------------------------------------------------------
+# DATA TO LOAD (real run). No embeddings/scores needed -- this assembles a timing
+# table from measured stage costs. Provide a JSON with, per (prune-rate, method),
+# the three stage costs (i) score computation, (ii) extrapolation, (iii) eval-train.
+# The real numbers are already reported in the ICML rebuttal (DUAL/GNN-DUAL,
+# old_Review_icml.txt lines ~453-468) and are ALREADY RENDERED in rebuttal.md W3/Q2:
+#
+#   Rate  Method     (i)Score  (ii)Extrap  (iii)Train  Total
+#   0.9   DU            910        0           456      1366
+#         GNN-DU        182      192           456       830
+#         DUAL          787        0           456      1243
+#         GNN-DUAL      157      182           456       795
+#   0.5   DU            910        0           182      1092
+#         GNN-DU        182      192           182       556
+#         DUAL          787        0           182       969
+#         GNN-DUAL      157      182           182       521
+#   0.1   DU            910        0            46       956
+#         GNN-DU        182      192            46       420
+#         DUAL          787        0            46       833
+#         GNN-DUAL      157      182            46       385
+# Extrapolation (GNN) replaces most of the score-computation cost: GNN-DUAL scoring
+# 787->157+182 (~2.32x), GNN-DU 910->182+192 (~2.43x); totals up to ~2.16x / 2.28x.
+# ---------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import argparse

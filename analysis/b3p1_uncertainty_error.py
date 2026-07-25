@@ -18,6 +18,26 @@ Self-test:
     python analysis/b3p1_uncertainty_error.py --smoke
 """
 
+# ---------------------------------------------------------------------------
+# DATA TO LOAD (real run). Root on the shared store:
+#   ROOT = /ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning
+#   (older mirror: /nfs/homedirs/dhp/unsupervised-data-pruning)
+# This script needs embeddings + subset scores S_s + full scores S:
+#   --embeddings    ROOT/savedir/embeddings/CIFAR10/embeddings_dict.pth
+#                   dict{idx->vec}; SAVED for CIFAR10. For IMAGENET / PLACES_365 /
+#                   SYNTHETIC_CIFAR100_1M recompute from a proxy checkpoint (e.g.
+#                   ROOT/models/CIFAR10/full_data/dual_model.pth).
+#   --subset_scores ROOT/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json  (= S_s)
+#   --full_scores   ROOT/scores/prune/CIFAR10_dynamic_uncertainty_0.json                 (= S, eval only)
+# Other datasets (swap CIFAR10 -> DS; metric = dynamic_uncertainty | tdds):
+#   S    : scores/prune/{IMAGENET_dynamic_uncertainty_0_4_20, IMAGENET_tdds_0_4_26,
+#          PLACES_365_dynamic_uncertainty_0, PLACES_365_tdds_0,
+#          SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0}.json
+#   S_s  : scores/extrapolation/subset/{CIFAR10_tdds_0, PLACES_365_dynamic_uncertainty_0,
+#          SYNTHETIC_CIFAR100_1M_dynamic_uncertainty_0}.json  (IMAGENET subset not located)
+#   embeds: savedir/embeddings/{imagenet,places365,SYNTHETIC_CIFAR100_1M}/embeddings_dict.pth
+# ---------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import argparse
