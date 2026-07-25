@@ -87,11 +87,42 @@ def calibrate(
     seed: int,
 ) -> Dict:
     n = emb.shape[0]
+    if not np.isfinite(emb).all():
+        bad = int((~np.isfinite(emb)).any(axis=1).sum())
+        raise ValueError(
+            f"[b1] embeddings contain non-finite values in {bad}/{n} rows -> "
+            "distances become NaN and every metric is None. Regenerate the "
+            "embeddings (analysis/make_embeddings.py) or drop the bad rows.")
+    max_key = max(max(subset_scores, default=-1), max(full_scores, default=-1))
+    if max_key >= n:
+        raise ValueError(
+            f"[b1] score dicts reference sample index {int(max_key)} >= "
+            f"n_embeddings={n}: the embeddings and score dicts live in DIFFERENT "
+            "index spaces. A dict{idx->vec} embedding file is re-stacked by sorted "
+            "key, so row i != sample_idx i unless the keys are exactly 0..N-1. "
+            "Use dense Tensor[N,d] embeddings whose row i == sample_idx i "
+            "(analysis/make_embeddings.py --format tensor).")
     rng = np.random.default_rng(seed)
     seed_idx, residual_idx = rc.seed_and_residual(subset_scores, n)
     fit_idx, val_idx = rc.fit_val_split(seed_idx, val_frac, rng)
     s_all = rc.scores_to_array(subset_scores, n)
     full = rc.scores_to_array(full_scores, n)
+
+    # Coverage guard: the ground-truth full scores S must cover the residual
+    # targets, otherwise y is NaN and pearson/spearman/mse are all None.
+    y = full[residual_idx]
+    covered = np.isfinite(y)
+    if int(covered.sum()) < 2:
+        raise ValueError(
+            f"[b1] full_scores covers only {int(covered.sum())}/{len(residual_idx)} "
+            "residual samples -> targets are (almost) all NaN, so every metric is "
+            "None. Pass the FULL score dict for this dataset, keyed by the SAME "
+            f"sample indices as the embeddings (full: n={len(full_scores)}, "
+            f"max_key={max(full_scores) if full_scores else 'NA'}; n_emb={n}).")
+    if int(covered.sum()) < len(residual_idx):
+        print(f"[b1] WARNING: full_scores misses "
+              f"{len(residual_idx) - int(covered.sum())}/{len(residual_idx)} "
+              "residual samples; metrics computed on the covered subset.")
 
     # Held-out extrapolation on the val split -> honest (ext, target) pairs
     ext_val = knn_extrapolate(emb, fit_idx, s_all[fit_idx], val_idx, k, distance)
@@ -101,12 +132,21 @@ def calibrate(
     # Residual extrapolation from the full seed set, then calibrate
     ext_res = knn_extrapolate(emb, seed_idx, s_all[seed_idx], residual_idx, k, distance)
     cal_res = np.asarray(cal_map(ext_res), dtype=np.float64)
-    y = full[residual_idx]
+
+    # Degenerate-map fallback: a constant map (isotonic collapse / platt slope
+    # clamped to 0 on a weak val fit) destroys all signal and makes the
+    # correlations NaN. Fall back to identity, which is still rank-preserving.
+    if float(np.std(cal_res[covered])) < 1e-12:
+        print("[b1] WARNING: calibration map collapsed to a constant "
+              "(weak/non-monotone validation fit); using identity map instead.")
+        cal_res = ext_res.copy()
 
     def stats(pred):
-        return {"pearson": rc.pearson(pred, y),
-                "spearman": rc.spearman(pred, y),
-                "mse": float(np.mean((pred - y) ** 2))}
+        m = covered & np.isfinite(pred)
+        return {"pearson": rc.pearson(pred[m], y[m]),
+                "spearman": rc.spearman(pred[m], y[m]),
+                "mse": float(np.mean((pred[m] - y[m]) ** 2)),
+                "n_eval": int(m.sum())}
 
     before, after = stats(ext_res), stats(cal_res)
     print(before,after)
