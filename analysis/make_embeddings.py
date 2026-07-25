@@ -95,7 +95,7 @@ def main() -> int:
                    help="Path to the proxy backbone state_dict (.pth).")
     p.add_argument("--out", required=True,
                    help="Output path for the embeddings (.pth).")
-    p.add_argument("--model-name", default="resnet18-self-trained",
+    p.add_argument("--model-name", default="resnet50-self-trained",
                    help="Backbone id for load_model_by_name (IMAGENET config uses "
                         "resnet18-self-trained; CIFAR uses resnet50-self-trained).")
     p.add_argument("--num-classes", type=int, default=1000)

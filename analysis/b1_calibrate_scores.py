@@ -22,6 +22,17 @@ Self-test:
     python analysis/b1_calibrate_scores.py --smoke
 """
 
+
+from __future__ import annotations
+
+import argparse
+from typing import Dict
+
+import numpy as np
+
+import rebuttal_common as rc
+from item1_knn_k_selection import knn_extrapolate
+
 # ---------------------------------------------------------------------------
 # DATA TO LOAD (real run). Root on the shared store:
 #   ROOT = /ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning
@@ -42,15 +53,13 @@ Self-test:
 #   embeds: savedir/embeddings/{imagenet,places365,SYNTHETIC_CIFAR100_1M}/embeddings_dict.pth
 # ---------------------------------------------------------------------------
 
-from __future__ import annotations
+ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
+SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
+SUBSET_SCORes_PATH = f"{ROOT}/scores/extrapolation/extrapolated/knn_du_CIFAR10_avg_resnet18-self-trained_k_10_seed_10000_euclidean__5_14.json"
+FULL_SCORES_PATH = f"{ROOT}/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
+embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth" 
+Outfolder = f"{ROOT}/analysis_reports/neurips26"
 
-import argparse
-from typing import Dict
-
-import numpy as np
-
-import rebuttal_common as rc
-from item1_knn_k_selection import knn_extrapolate
 
 
 def fit_isotonic(x: np.ndarray, y: np.ndarray):
@@ -100,6 +109,7 @@ def calibrate(
                 "mse": float(np.mean((pred - y) ** 2))}
 
     before, after = stats(ext_res), stats(cal_res)
+    print(before,after)
     # Rank preservation <=> the fitted map is monotone non-decreasing over the
     # observed range (plateaus/ties are allowed; order is never reversed).
     order = np.argsort(ext_res)
@@ -149,16 +159,16 @@ def run_smoke() -> Dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description="B1: ranking-preserving calibration")
     ap.add_argument("--smoke", action="store_true")
-    ap.add_argument("--embeddings")
-    ap.add_argument("--subset_scores")
-    ap.add_argument("--full_scores")
+    ap.add_argument("--embeddings",default=embeddings_path)
+    ap.add_argument("--subset_scores", default=SUBSET_SCORES_PATH)
+    ap.add_argument("--full_scores", default=FULL_SCORES_PATH)
     ap.add_argument("--method", default="isotonic", choices=["isotonic", "platt"])
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--val_frac", type=float, default=0.1)
     ap.add_argument("--distance", default="euclidean", choices=["euclidean", "cosine"])
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--out_scores")
-    ap.add_argument("--out_metrics")
+    ap.add_argument("--out_scores", default=f"{Outfolder}/calibrated_scores.json")
+    ap.add_argument("--out_metrics", default=f"{Outfolder}/calibration_metrics.json")
     args = ap.parse_args()
 
     if args.smoke:
@@ -170,6 +180,8 @@ def main() -> None:
     emb = rc.load_embeddings(args.embeddings)
     subset = rc.load_scores(args.subset_scores)
     full = rc.load_scores(args.full_scores)
+    print(emb.shape)
+
     res = calibrate(emb, subset, full, args.method, args.k, args.val_frac,
                     args.distance, args.seed)
     _print(res)

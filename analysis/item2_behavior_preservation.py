@@ -19,6 +19,15 @@ Self-test:
     python analysis/item2_behavior_preservation.py --smoke
 """
 
+from __future__ import annotations
+
+import argparse
+from typing import Dict, Optional
+
+import numpy as np
+
+import rebuttal_common as rc
+
 # ---------------------------------------------------------------------------
 # DATA TO LOAD (real run). Root on the shared store:
 #   ROOT = /ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning
@@ -39,14 +48,8 @@ Self-test:
 # then evaluate each on the test set and dump {sample_idx,label,pred} to the npz above.
 # ---------------------------------------------------------------------------
 
-from __future__ import annotations
+ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
 
-import argparse
-from typing import Dict, Optional
-
-import numpy as np
-
-import rebuttal_common as rc
 
 
 def predict_from_checkpoint(checkpoint_path, model, test_loader, device="cuda"):
