@@ -25,6 +25,7 @@ Each script also has its own `--smoke` flag.
 | `b1_calibrate_scores.py` | Ranking-preserving score calibration | bWqr/myyu/RpJS |
 | `b3p1_uncertainty_error.py` | Uncertainty as error predictor | Dcja W1, RpJS W3 |
 | `longtail_fidelity.py`, `lt_utils.py` | Long-tail score fidelity (replaces dist-shift) | myyu, RpJS W3 |
+| `make_embeddings.py` | Regenerate proxy embeddings (not persisted on disk) | helper |
 | `rebuttal_common.py` | shared loaders / metrics / fixtures | — |
 
 ## Real-run examples
@@ -45,6 +46,13 @@ python analysis/item4_regression_baselines.py \
 # saved as npz {sample_idx,label,pred} from loaded *_model.pth checkpoints
 python analysis/item2_behavior_preservation.py \
   --pred_gt preds_gt.npz --pred_ext preds_ext.npz --out results/item2.json
+
+# Embeddings are NOT persisted (save_embeddings: false everywhere) — regenerate
+# from a proxy checkpoint. IMAGENET has both full + subset proxies:
+python analysis/make_embeddings.py \
+  --dataset IMAGENET \
+  --ckpt .../models/imagenet/subset_data/tdds_256234.pth \
+  --out  .../savedir/embeddings/imagenet/embeddings_dict.pth
 ```
 
 ## Deferred (Tier C — need retraining/compute)
