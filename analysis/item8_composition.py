@@ -38,6 +38,7 @@ Self-test:
 from __future__ import annotations
 
 import argparse
+import os
 from collections import Counter
 from typing import Dict, List
 
@@ -52,8 +53,142 @@ EXTRAPOLATED_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/gnn__du_IM
 FULL_SCORES_PATH = f"{ROOT}/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
 embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth" 
 Outfolder = f"{ROOT}/analysis_reports/neurips26"
-#TODO load labels from dataset, use existing dataload to get labels
-#TODO maybe add U-MAP/TSNE visualization of retained vs dropped samples, colored by class or score as side analysis. This is a bit more involved, but could be a nice visual for the rebuttal.
+
+
+def load_labels(dataset_name: str, cache: str | None = None) -> np.ndarray:
+    """Return a per-sample-index int label array for ``dataset_name`` using the
+    project's own data pipeline (utils.dataset.get_dataset), so ordering matches
+    the sample_idx used everywhere else.
+
+    Labels are not stored next to the scores, so we materialise them once from
+    the trainset (which yields ``(image, label, index)``) and optionally cache
+    them to ``cache`` (.npy) for reuse. Run from the repo root; imports torch
+    lazily so ``--smoke`` works without it.
+    """
+    if cache and os.path.exists(cache):
+        return np.load(cache)
+
+    import sys
+    _src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
+    if _src not in sys.path:
+        sys.path.insert(0, _src)
+    from torch.utils.data import DataLoader
+    from utils.dataset import get_dataset
+
+    trainset, _ = get_dataset(dataset_name)
+    n = len(trainset)
+    labels = np.full(n, -1, dtype=np.int64)
+    loader = DataLoader(trainset, batch_size=512, shuffle=False, num_workers=4)
+    for _imgs, lbls, idxs in loader:
+        idxs = idxs.to("cpu").numpy().astype(np.int64)
+        labels[idxs] = lbls.to("cpu").numpy().astype(np.int64)
+    if (labels < 0).any():
+        raise RuntimeError(
+            f"{int((labels < 0).sum())} sample indices never appeared in the "
+            f"{dataset_name} loader; index space mismatch.")
+    if cache:
+        os.makedirs(os.path.dirname(os.path.abspath(cache)) or ".", exist_ok=True)
+        np.save(cache, labels)
+        print(f"[item8] cached labels -> {cache}")
+    return labels
+
+
+def embed_projection_plot(
+    embeddings: np.ndarray,
+    full_scores: Dict[int, float],
+    extrapolated_scores: Dict[int, float],
+    labels: np.ndarray,
+    keep_frac: float,
+    out_png: str,
+    method: str = "umap",
+    color_by: str = "status",
+    max_points: int = 20000,
+    seed: int = 0,
+) -> str:
+    """2-D UMAP/TSNE projection of the embeddings, highlighting where the
+    extrapolation's pruning decision agrees/disagrees with the ground truth at
+    ``keep_frac``. Nice qualitative exhibit for the rebuttal (Dcja / RpJS W3).
+
+    color_by:
+      * ``status`` -- 4 way agree-keep / agree-drop / GT-drop-EXT-keep (rescued)
+        / GT-keep-EXT-drop (newly dropped). Shows *where* disagreements live.
+      * ``class``  -- colour by class label.
+      * ``score``  -- colour by ground-truth score.
+
+    Heavy deps (torch not needed here; needs matplotlib and umap-learn or
+    sklearn) are imported lazily so ``--smoke`` stays dependency-free.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    emb = np.asarray(embeddings, dtype=np.float32)
+    n = emb.shape[0]
+    if labels.shape[0] != n:
+        raise ValueError(f"labels ({labels.shape[0]}) vs embeddings ({n}) mismatch")
+
+    gt_keep = set(rc.topk_retained(full_scores, keep_frac))
+    ex_keep = set(rc.topk_retained(extrapolated_scores, keep_frac))
+
+    rng = np.random.default_rng(seed)
+    sel = np.arange(n)
+    if n > max_points:
+        sel = rng.choice(n, size=max_points, replace=False)
+
+    # 2-D projection
+    method = method.lower()
+    if method == "umap":
+        try:
+            import umap  # type: ignore
+            reducer = umap.UMAP(n_components=2, random_state=seed)
+        except Exception as exc:  # pragma: no cover - env dependent
+            print(f"[item8] umap unavailable ({exc}); falling back to TSNE")
+            method = "tsne"
+    if method == "tsne":
+        from sklearn.manifold import TSNE
+        reducer = TSNE(n_components=2, random_state=seed, init="pca")
+    xy = reducer.fit_transform(emb[sel])
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    if color_by == "status":
+        status = np.empty(sel.shape[0], dtype=object)
+        for j, i in enumerate(sel):
+            i = int(i)
+            in_gt, in_ex = i in gt_keep, i in ex_keep
+            status[j] = ("agree_keep" if in_gt and in_ex else
+                         "agree_drop" if not in_gt and not in_ex else
+                         "rescued" if not in_gt and in_ex else
+                         "newly_dropped")
+        palette = {"agree_keep": "#4c9f70", "agree_drop": "#cccccc",
+                   "rescued": "#d1495b", "newly_dropped": "#3d5a80"}
+        z = {"agree_drop": 0, "agree_keep": 1, "rescued": 2, "newly_dropped": 3}
+        for name in sorted(set(status), key=lambda s: z[s]):
+            m = status == name
+            ax.scatter(xy[m, 0], xy[m, 1], s=4, c=palette[name], label=name,
+                       alpha=0.6 if name == "agree_drop" else 0.85,
+                       linewidths=0)
+        ax.legend(markerscale=3, fontsize=8, loc="best")
+    elif color_by == "class":
+        sc = ax.scatter(xy[:, 0], xy[:, 1], s=4, c=labels[sel],
+                        cmap="tab20", alpha=0.7, linewidths=0)
+        fig.colorbar(sc, ax=ax, label="class")
+    elif color_by == "score":
+        gt_arr = rc.scores_to_array(full_scores, n)
+        sc = ax.scatter(xy[:, 0], xy[:, 1], s=4, c=gt_arr[sel],
+                        cmap="viridis", alpha=0.7, linewidths=0)
+        fig.colorbar(sc, ax=ax, label="ground-truth score")
+    else:
+        raise ValueError(f"unknown color_by={color_by!r}")
+
+    ax.set_title(f"{method.upper()} of embeddings @ keep={keep_frac:g} "
+                 f"(prune={1 - keep_frac:g}), colour={color_by}")
+    ax.set_xticks([]); ax.set_yticks([])
+    fig.tight_layout()
+    os.makedirs(os.path.dirname(os.path.abspath(out_png)) or ".", exist_ok=True)
+    fig.savefig(out_png, dpi=150)
+    plt.close(fig)
+    print(f"[item8] wrote projection -> {out_png}")
+    return out_png
 
 
 def composition(
@@ -129,6 +264,16 @@ def run_smoke() -> Dict:
     res = composition(full, ext, labels, [0.5, 0.2, 0.1])
     _print(res)
     assert all(0 <= r["jaccard"] <= 1 for r in res["rows"])
+    # exercise the projection exhibit (TSNE keeps deps light; umap optional)
+    import tempfile
+    out_png = os.path.join(tempfile.gettempdir(), "item8_projection_smoke.png")
+    try:
+        embed_projection_plot(emb, full, ext, labels, 0.2, out_png,
+                              method="tsne", color_by="status", max_points=400)
+        assert os.path.exists(out_png)
+        print(f"[item8] projection smoke OK -> {out_png}")
+    except Exception as exc:  # pragma: no cover - sklearn/matplotlib optional
+        print(f"[item8] projection smoke skipped ({type(exc).__name__}: {exc})")
     print("[item8] SMOKE PASSED")
     return res
 
@@ -139,25 +284,47 @@ def main() -> None:
     ap.add_argument("--full_scores", default=FULL_SCORES_PATH)
     ap.add_argument("--extrapolated_scores", default=EXTRAPOLATED_SCORES_PATH)
     ap.add_argument("--labels", help="npy of int labels indexed by sample id")
+    ap.add_argument("--dataset", help="dataset name; if given (and --labels not), "
+                    "labels are materialised via utils.dataset.get_dataset")
+    ap.add_argument("--labels_cache", help="npy path to cache/reuse dataset labels")
     ap.add_argument("--keep_fracs", type=float, nargs="+",
                     default=[0.5, 0.2, 0.1, 0.05])
     ap.add_argument("--out")
+    # optional UMAP/TSNE projection exhibit
+    ap.add_argument("--embeddings", help="embeddings .pth/.npy/.npz for projection plot")
+    ap.add_argument("--plot_out", help="path to write the projection PNG")
+    ap.add_argument("--plot_keep_frac", type=float, default=0.1)
+    ap.add_argument("--plot_method", choices=["umap", "tsne"], default="umap")
+    ap.add_argument("--plot_color_by", choices=["status", "class", "score"],
+                    default="status")
     args = ap.parse_args()
 
     if args.smoke:
         run_smoke()
         return
-    if not (args.full_scores and args.extrapolated_scores and args.labels):
-        ap.error("need --full_scores --extrapolated_scores --labels (or --smoke)")
+    if not (args.full_scores and args.extrapolated_scores):
+        ap.error("need --full_scores --extrapolated_scores (or --smoke)")
+    if not (args.labels or args.dataset):
+        ap.error("need --labels or --dataset (to materialise labels)")
 
     full = rc.load_scores(args.full_scores)
     ext = rc.load_scores(args.extrapolated_scores)
-    labels = np.load(args.labels)
+    if args.labels:
+        labels = np.load(args.labels)
+    else:
+        labels = load_labels(args.dataset, cache=args.labels_cache)
     res = composition(full, ext, labels, args.keep_fracs)
     _print(res)
     if args.out:
         rc.save_json(res, args.out)
         print(f"[item8] wrote {args.out}")
+
+    if args.embeddings and args.plot_out:
+        emb = rc.load_embeddings(args.embeddings)
+        embed_projection_plot(
+            emb, full, ext, labels, args.plot_keep_frac, args.plot_out,
+            method=args.plot_method, color_by=args.plot_color_by,
+        )
 
 
 if __name__ == "__main__":
