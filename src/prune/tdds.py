@@ -96,7 +96,7 @@ def main(cfg_path: str):
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
     cfg = cfg.PLACES_365
-    print(cfg)
+    logger.info(cfg)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
@@ -191,10 +191,10 @@ def main(cfg_path: str):
                     )
 
                 optimizer.zero_grad()
-                train_losses.append(loss)
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
+                train_losses.append(loss.item())
 
                 if batch_idx % cfg.logging.log_interval == 0 and batch_idx > 0:
                     logger.info(

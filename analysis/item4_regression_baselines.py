@@ -56,8 +56,9 @@ from item1_knn_k_selection import knn_extrapolate
 
 
 ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
-SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_11_20.json"
-SUBSET_FULL_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/gnn__du_IMAGENET_resnet18-self-trained_k_20_seed_128117_euclidean.json"
+SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_256234_4_19.json"
+SUBSET_FULL_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/gnn__du_IMAGENET_resnet18-self-trained_k_20_seed_256234_euclidean.json"
+SUBSET_KNN_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/knn__du_IMAGENET_weighted_resnet18-self-trained_k_20_seed_256234_euclidean__4_20.json"
 FULL_SCORES_PATH = f"{ROOT}/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
 embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth" 
 Outfolder = f"{ROOT}/analysis_reports/neurips26"
@@ -135,6 +136,9 @@ def evaluate_baselines(
     full_all = rc.scores_to_array(full_scores, n)
     y_true = full_all[residual_idx]
 
+    print(f"[item4] n={n} seed={len(seed_idx)} residual={len(residual_idx)} ")
+    assert len(residual_idx) != 0
+    
     def score(pred):
         return {
             "pearson": rc.pearson(pred, y_true),
@@ -153,8 +157,9 @@ def evaluate_baselines(
 
     if "knn_weighted" in methods:
         # select k on val (deployable), then extrapolate residual
-        best_k, best_c = 10, -np.inf
+        best_k, best_c = 20, -np.inf
         for k in (5, 10, 20, 50):
+            continue
             p = knn_extrapolate(emb, fit_idx, s_all[fit_idx], val_idx, k)
             c = rc.pearson(p, s_all[val_idx])
             if c > best_c:
@@ -242,6 +247,7 @@ def main() -> None:
     emb = rc.load_embeddings(args.embeddings)
     subset = rc.load_scores(args.subset_scores)
     full = rc.load_scores(args.full_scores)
+    print(f"[item4] running baselines on {len(list(subset.keys()))} subset scores, {len(list(full.keys()))} full scores")
     res = evaluate_baselines(emb, subset, full, args.val_frac, args.seed, args.methods)
     _print(res)
     if args.out_metrics:
