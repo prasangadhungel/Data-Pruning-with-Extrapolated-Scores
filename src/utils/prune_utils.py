@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from collections import defaultdict
@@ -120,6 +121,7 @@ def prune(
     sampling_method="topk",
     pred_mean=None,
     mu_d=None,
+    save_model_path=None,
 ):
     """
     Prune the dataset based on the uncertainty scores.
@@ -238,7 +240,13 @@ def prune(
             logger.info(
                 f"Epoch {epoch + 1}, Train Loss: {train_loss:.5f}, Test Acc: {test_acc:.5f}"
             )
-
+        if save_model_path is not None:
+            os.makedirs(save_model_path, exist_ok=True)
+            model_save_path = os.path.join(
+                save_model_path, f"model_pruned_{str_prune_percentage}.pth"
+            )
+            torch.save(net.state_dict(), model_save_path)
+            logger.info(f"Saved pruned model to {model_save_path}")
         end_time = time.time()
         training_time = end_time - start_time
 

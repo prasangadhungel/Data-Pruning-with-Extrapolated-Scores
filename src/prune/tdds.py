@@ -95,8 +95,8 @@ def main(cfg_path: str):
 
     cudnn.benchmark = True
     cfg = OmegaConf.load(cfg_path)
-    cfg = cfg.IMAGENET
-
+    cfg = cfg.PLACES_365
+    print(cfg)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainset, train_loader, test_loader, num_samples = prepare_data(
         cfg.dataset, cfg.training.batch_size
@@ -269,6 +269,7 @@ def main(cfg_path: str):
                 cfg=cfg,
                 wandb_name="tdds-last-scheduler-",
                 device=device,
+                save_model_path=cfg.save_path,
             )
 
 

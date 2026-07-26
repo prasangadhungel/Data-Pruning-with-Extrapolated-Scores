@@ -54,6 +54,15 @@ import rebuttal_common as rc
 from item1_knn_k_selection import knn_extrapolate
 
 
+
+ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
+SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_11_20.json"
+SUBSET_FULL_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/gnn__du_IMAGENET_resnet18-self-trained_k_20_seed_128117_euclidean.json"
+FULL_SCORES_PATH = f"{ROOT}/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
+embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth" 
+Outfolder = f"{ROOT}/analysis_reports/neurips26"
+
+
 def _fit_predict_sklearn(
     make_model: Callable,
     grid: List[dict],
@@ -212,14 +221,15 @@ def run_smoke() -> Dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Item 4: stronger regression baselines")
     ap.add_argument("--smoke", action="store_true")
-    ap.add_argument("--embeddings")
-    ap.add_argument("--subset_scores")
-    ap.add_argument("--full_scores")
+    ap.add_argument("--embeddings", default=embeddings_path)
+    ap.add_argument("--subset_scores",default=SUBSET_SCORES_PATH)
+    ap.add_argument("--full_scores", default=FULL_SCORES_PATH)
     ap.add_argument("--methods", nargs="+", default=ALL_METHODS, choices=ALL_METHODS)
     ap.add_argument("--val_frac", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--out_metrics")
-    ap.add_argument("--out_scores_dir",
+    ap.add_argument("--out_metrics",default=f"{Outfolder}/item4_baseline_metrics.json",
+                    help="path to dump JSON metrics dict")
+    ap.add_argument("--out_scores_dir", default=f"{Outfolder}/item4_baseline_scores",
                     help="dir to dump one JSON score dict per method (drop-in for prune)")
     args = ap.parse_args()
 

@@ -46,6 +46,16 @@ import numpy as np
 import rebuttal_common as rc
 
 
+ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
+SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/subset/IMAGENET_dynamic_uncertainty_0_11_20.json"
+EXTRAPOLATED_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/gnn__du_IMAGENET_resnet18-self-trained_k_20_seed_128117_euclidean.json"
+FULL_SCORES_PATH = f"{ROOT}/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
+embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth" 
+Outfolder = f"{ROOT}/analysis_reports/neurips26"
+#TODO load labels from dataset, use existing dataload to get labels
+#TODO maybe add U-MAP/TSNE visualization of retained vs dropped samples, colored by class or score as side analysis. This is a bit more involved, but could be a nice visual for the rebuttal.
+
+
 def composition(
     full_scores: Dict[int, float],
     extrapolated_scores: Dict[int, float],
@@ -126,8 +136,8 @@ def run_smoke() -> Dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Item 8: pruning-composition analysis")
     ap.add_argument("--smoke", action="store_true")
-    ap.add_argument("--full_scores")
-    ap.add_argument("--extrapolated_scores")
+    ap.add_argument("--full_scores", default=FULL_SCORES_PATH)
+    ap.add_argument("--extrapolated_scores", default=EXTRAPOLATED_SCORES_PATH)
     ap.add_argument("--labels", help="npy of int labels indexed by sample id")
     ap.add_argument("--keep_fracs", type=float, nargs="+",
                     default=[0.5, 0.2, 0.1, 0.05])

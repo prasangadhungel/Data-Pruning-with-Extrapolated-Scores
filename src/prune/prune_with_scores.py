@@ -56,12 +56,13 @@ def main(cfg_path: str):
         wandb_name=cfg.wandb_name,
         rebalance_labels=cfg.pruning.rebalance_labels,
         device=device,
+        save_model_path=cfg.save_path,
     )
 
 
 if __name__ == "__main__":
     default_config_path = os.path.join(
-        os.path.dirname(__file__), "configs", "json_config.yaml"
+        os.path.dirname(__file__), "configs", "prune_with_full_scores.yaml" #json_config
     )
     config_path = parse_config(
         default_config=default_config_path,

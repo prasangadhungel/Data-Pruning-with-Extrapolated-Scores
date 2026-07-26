@@ -53,12 +53,14 @@ from item1_knn_k_selection import knn_extrapolate
 #   embeds: savedir/embeddings/{imagenet,places365,SYNTHETIC_CIFAR100_1M}/embeddings_dict.pth
 # ---------------------------------------------------------------------------
 
+
 ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
 SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/subset/CIFAR10_dynamic_uncertainty_0.json"
-SUBSET_SCORes_PATH = f"{ROOT}/scores/extrapolation/extrapolated/knn_du_CIFAR10_avg_resnet18-self-trained_k_10_seed_10000_euclidean__5_14.json"
-FULL_SCORES_PATH = f"{ROOT}/scores/prune/CIFAR10_dynamic_uncertainty_0.json"
+SUBSET_SCORES_PATH = f"{ROOT}/scores/extrapolation/extrapolated/gnn__du_IMAGENET_resnet18-self-trained_k_20_seed_128117_euclidean.json"
+FULL_SCORES_PATH = f"{ROOT}/scores/prune/IMAGENET_dynamic_uncertainty_0_4_20.json"
 embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth" 
 Outfolder = f"{ROOT}/analysis_reports/neurips26"
+
 
 
 
@@ -108,6 +110,7 @@ def calibrate(
     s_all = rc.scores_to_array(subset_scores, n)
     full = rc.scores_to_array(full_scores, n)
 
+    print(f"[b1] seed/residual sizes: {len(seed_idx)}/{len(residual_idx)}, {s_all.shape} , {full.shape} ")
     # Coverage guard: the ground-truth full scores S must cover the residual
     # targets, otherwise y is NaN and pearson/spearman/mse are all None.
     y = full[residual_idx]

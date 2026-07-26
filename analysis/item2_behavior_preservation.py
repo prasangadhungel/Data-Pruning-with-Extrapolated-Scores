@@ -49,8 +49,11 @@ import rebuttal_common as rc
 # ---------------------------------------------------------------------------
 
 ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
+gnn_extra_checkpoint = f"/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/pruned_models/PLACES_365/gnn__TDDS_PLACES_365_resnet50-self-trained_k_10_seed_360692_euclidean_5_31/model_pruned_80.pth"
+knn_extra_checkpoint = f"/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/pruned_models/PLACES_365/knn_TDDS_PLACES_365_weighted_resnet50-self-trained_k_20_seed_360692_euclidean__5_31/model_pruned_80.pth"
+original_score_checkpoint = f"{ROOT}/models/pruned_models/PLACES_365/tdds/model_pruned_80.pth"
 
-
+#todo change to use models and run predictions from checkpoints instead of npz files, since the checkpoints exist now
 
 def predict_from_checkpoint(checkpoint_path, model, test_loader, device="cuda"):
     """Per-sample test predictions from a loaded model (real-machine path).
