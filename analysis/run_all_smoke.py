@@ -14,6 +14,7 @@ MODULES = [
     ("item8_composition", "Item 8  pruning-composition analysis"),
     ("item3_timing_report", "Item 3  extrapolation-vs-DUAL timing"),
     ("item2_behavior_preservation", "Item 2  error-set / subgroup preservation"),
+    ("q2_pretrained_backbone_knn", "Dcja Q2  pretrained-backbone KNN extrapolation"),
     ("b1_calibrate_scores", "B1      ranking-preserving calibration"),
     ("b3p1_uncertainty_error", "B3.1    uncertainty as error predictor"),
     ("longtail_fidelity", "LongTail score-fidelity (replaces dist-shift)"),
