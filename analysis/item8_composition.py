@@ -191,6 +191,74 @@ def embed_projection_plot(
     return out_png
 
 
+def _score_mass_recovery(full_arr: np.ndarray, gt_keep: set, ex_keep: set) -> float:
+    """Retained GT-score-mass by extrapolation / oracle max mass (same budget).
+
+    Forgiving: two different retained sets with similar GT score mass prune
+    equally well. 1.0 = ext keeps as much GT-important mass as the oracle.
+    Shifted so a min-mass (worst) set maps toward 0 not an arbitrary floor.
+    """
+    order = np.argsort(full_arr)  # ascending
+    k = len(gt_keep)
+    if k == 0:
+        return float("nan")
+    total = float(full_arr.sum())
+    max_mass = float(full_arr[order[-k:]].sum())      # oracle keeps top-k mass
+    min_mass = float(full_arr[order[:k]].sum())        # worst keeps bottom-k mass
+    ex_mass = float(full_arr[list(ex_keep)].sum())
+    denom = max_mass - min_mass
+    if denom <= 1e-12:
+        return 1.0
+    return (ex_mass - min_mass) / denom
+
+
+def _rbo(gt_rank: List[int], ex_rank: List[int], p: float = 0.98) -> float:
+    """Rank-biased overlap of two ranked lists (top-weighted, [0,1]).
+
+    p near 1 = deep lists matter; smaller p = weight only the very top.
+    Truncated RBO over the given depth (extrapolated set size).
+    """
+    d = min(len(gt_rank), len(ex_rank))
+    if d == 0:
+        return float("nan")
+    seen_gt, seen_ex = set(), set()
+    overlap = 0
+    s = 0.0
+    for i in range(d):
+        seen_gt.add(gt_rank[i])
+        seen_ex.add(ex_rank[i])
+        overlap = len(seen_gt & seen_ex)
+        s += (overlap / (i + 1)) * (p ** i)
+    return float((1 - p) * s / (1 - p ** d)) if p ** d < 1 else float(overlap / d)
+
+
+def _soft_jaccard(full_scores, ext_scores, keep: float, tol_frac: float = 0.02) -> float:
+    """Tolerance Jaccard: near-tie boundary confusions count as matches.
+
+    A sample in one keep-set but not the other still counts as agreement if
+    its rank in the *other* ranking is within ``tol_frac`` of the cutoff.
+    Softens the hard boundary flips that tank plain Jaccard at high prune.
+    """
+    gt_ord = [k for k, _ in sorted(full_scores.items(), key=lambda kv: kv[1], reverse=True)]
+    ex_ord = [k for k, _ in sorted(ext_scores.items(), key=lambda kv: kv[1], reverse=True)]
+    n = len(gt_ord)
+    n_keep = int(keep * n)
+    band = max(1, int(tol_frac * n))
+    gt_rank = {k: i for i, k in enumerate(gt_ord)}
+    ex_rank = {k: i for i, k in enumerate(ex_ord)}
+    gt_keep = set(gt_ord[:n_keep])
+    ex_keep = set(ex_ord[:n_keep])
+    cutoff = n_keep + band
+    soft_inter = 0
+    for k in gt_keep | ex_keep:
+        in_gt = k in gt_keep or gt_rank[k] < cutoff
+        in_ex = k in ex_keep or ex_rank[k] < cutoff
+        if in_gt and in_ex:
+            soft_inter += 1
+    union = len(gt_keep | ex_keep)
+    return float(soft_inter / union) if union else 1.0
+
+
 def composition(
     full_scores: Dict[int, float],
     extrapolated_scores: Dict[int, float],
@@ -200,12 +268,18 @@ def composition(
     n = len(labels)
     full_arr = rc.scores_to_array(full_scores, n)
     ext_arr = rc.scores_to_array(extrapolated_scores, n)
+    gt_order = [k for k, _ in sorted(full_scores.items(), key=lambda kv: kv[1], reverse=True)]
+    ex_order = [k for k, _ in sorted(extrapolated_scores.items(), key=lambda kv: kv[1], reverse=True)]
 
     rows = []
     for keep in keep_fracs:
         gt_keep = set(rc.topk_retained(full_scores, keep))
         ex_keep = set(rc.topk_retained(extrapolated_scores, keep))
         agreement = len(gt_keep & ex_keep) / max(1, len(gt_keep))
+        k_keep = len(gt_keep)
+        mass_rec = _score_mass_recovery(full_arr, gt_keep, ex_keep)
+        rbo = _rbo(gt_order[:k_keep], ex_order[:k_keep], p=0.98)
+        soft_jac = _soft_jaccard(full_scores, extrapolated_scores, keep, tol_frac=0.02)
 
         gt_classes = Counter(int(labels[i]) for i in gt_keep)
         ex_classes = Counter(int(labels[i]) for i in ex_keep)
@@ -226,6 +300,9 @@ def composition(
             "keep_frac": keep,
             "prune_rate": round(1 - keep, 3),
             "jaccard": rc.jaccard(gt_keep, ex_keep),
+            "soft_jaccard": soft_jac,
+            "rbo": rbo,
+            "score_mass_recovery": mass_rec,
             "agreement": agreement,
             "class_balance_l1": class_l1,
             "retained_score_mean_gt": float(full_arr[list(gt_keep)].mean()),
@@ -238,12 +315,14 @@ def composition(
 
 def _print(res: Dict) -> None:
     print(f"  n={res['n']} classes={res['num_classes']}")
-    hdr = ("prune", "jaccard", "agree", "cls_L1", "mean_gt", "mean_ext",
-           "rescued", "dropped")
+    hdr = ("prune", "jaccard", "softjac", "rbo", "massrec", "agree", "cls_L1",
+           "mean_gt", "mean_ext", "rescued", "dropped")
     print("  " + " ".join(f"{h:>8}" for h in hdr))
     for r in res["rows"]:
         print("  " + " ".join(f"{v:>8}" for v in (
-            r["prune_rate"], f"{r['jaccard']:.3f}", f"{r['agreement']:.3f}",
+            r["prune_rate"], f"{r['jaccard']:.3f}", f"{r['soft_jaccard']:.3f}",
+            f"{r['rbo']:.3f}", f"{r['score_mass_recovery']:.3f}",
+            f"{r['agreement']:.3f}",
             f"{r['class_balance_l1']:.3f}", f"{r['retained_score_mean_gt']:.3f}",
             f"{r['retained_score_mean_ext_on_gtscale']:.3f}",
             r["rescued_gt_dropped"], r["newly_dropped_gt_kept"])))
