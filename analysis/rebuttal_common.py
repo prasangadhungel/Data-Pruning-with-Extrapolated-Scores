@@ -36,12 +36,15 @@ def load_scores(path: str) -> Dict[int, float]:
     return {int(k): float(v) for k, v in raw.items()}
 
 
-def load_embeddings(path: str) -> np.ndarray:
-    """Load embeddings as a ``float`` ``np.ndarray`` of shape ``[N, d]``.
+def load_embeddings(path: str, dtype=np.float64) -> np.ndarray:
+    """Load embeddings as an ``np.ndarray`` of shape ``[N, d]``.
 
     Accepts ``.pth`` (torch), ``.npy`` or ``.npz`` (numpy). ``torch`` is only
     imported when a ``.pth`` file is actually loaded, so local/smoke runs never
     require it.
+
+    ``dtype`` controls the output precision. Pass ``np.float32`` for large
+    matrices (e.g. ImageNet-scale) to halve the memory footprint.
     """
     ext = os.path.splitext(path)[1].lower()
     if ext in (".pth", ".pt"):
@@ -54,13 +57,13 @@ def load_embeddings(path: str) -> np.ndarray:
             arr = np.stack([np.asarray(obj[k]).reshape(-1) for k in idxs])
         else:
             arr = obj.detach().cpu().numpy()
-        return np.asarray(arr, dtype=np.float64)
+        return np.asarray(arr, dtype=dtype)
     if ext == ".npy":
-        return np.asarray(np.load(path), dtype=np.float64)
+        return np.asarray(np.load(path), dtype=dtype)
     if ext == ".npz":
         z = np.load(path)
         key = "embeddings" if "embeddings" in z else list(z.keys())[0]
-        return np.asarray(z[key], dtype=np.float64)
+        return np.asarray(z[key], dtype=dtype)
     raise ValueError(f"Unsupported embeddings extension: {ext}")
 
 

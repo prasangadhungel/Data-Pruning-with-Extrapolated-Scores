@@ -9,8 +9,11 @@ rule), then scored on the residual set against the ground-truth ``S``.
 
 Baselines:
   * knn_weighted   - the paper's distance-weighted KNN (reference)
-  * kernel_ridge   - RBF Kernel Ridge Regression
-  * svr_rbf        - RBF Support Vector Regression
+  * knn_mean       - unweighted KNN (ablation: does the distance weighting matter?)
+  * ridge          - plain linear Ridge on the embeddings (cheapest floor, O(N d))
+  * kernel_ridge   - RBF Kernel Ridge Regression (Nystrom-approx when large)
+  * svr_rbf        - RBF Support Vector Regression (RBFSampler+LinearSVR when large)
+  * hist_gbr       - Histogram Gradient Boosting regressor (lean, near-linear)
   * random_forest  - Random Forest regressor
   * label_prop     - graph label propagation over a kNN graph (transductive)
 
@@ -18,6 +21,17 @@ Each produces an extrapolated score dict in the SAME JSON format as the repo,
 so it is a drop-in for ``src/prune/prune_with_scores.py`` on the real machine.
 
 Cheap stage only (no downstream training): report Pearson/Spearman vs S on D_r.
+
+Memory-lean for ImageNet-1M:
+  * embeddings loaded as float32 (halves the [N, d] footprint);
+  * kernel_ridge / svr_rbf auto-switch from exact RBF (small data) to a
+    linear-memory approximation (Nystrom+Ridge / RBFSampler+LinearSVR) once the
+    training set exceeds ``--exact_max`` -> no dense N_train x N_train kernel;
+  * heavy regressors train on a random subsample capped at ``--max_train``;
+  * all predictions run in ``--pred_chunk`` batches (no huge residual x train
+    intermediate);
+  * label_prop builds its kNN graph in memory-bounded chunks and is skipped
+    above ``--label_prop_max`` unless ``--force_label_prop`` (brute O(N^2)).
 
 Self-test:
     python analysis/item4_regression_baselines.py --smoke
@@ -64,6 +78,76 @@ embeddings_path = f"{ROOT}/savedir/embeddings/imagenet/submodel_embedding.pth"
 Outfolder = f"{ROOT}/analysis_reports/neurips26"
 
 
+def _f32(emb: np.ndarray) -> np.ndarray:
+    """Contiguous float32 view (halves memory, speeds up BLAS)."""
+    return np.ascontiguousarray(emb, dtype=np.float32)
+
+
+def _cap(idx: np.ndarray, y: np.ndarray, max_n: int, rng) -> Tuple[np.ndarray, np.ndarray]:
+    """Random subsample (idx, y) to at most ``max_n`` rows (0/None = no cap)."""
+    if max_n and len(idx) > max_n:
+        sel = rng.choice(len(idx), size=max_n, replace=False)
+        return idx[sel], y[sel]
+    return idx, y
+
+
+def _chunk_predict(model, emb: np.ndarray, idx: np.ndarray, chunk: int) -> np.ndarray:
+    """Predict over ``idx`` in ``chunk``-sized batches -> bounded memory."""
+    out = np.empty(len(idx), dtype=np.float64)
+    for s in range(0, len(idx), chunk):
+        j = idx[s:s + chunk]
+        out[s:s + chunk] = model.predict(emb[j])
+    return out
+
+
+def _default_gamma(emb: np.ndarray) -> float:
+    """sklearn 'scale'-style RBF gamma = 1 / (n_features * Var(X))."""
+    v = float(emb.var())
+    d = emb.shape[1]
+    return 1.0 / (d * v) if v > 0 else 1.0 / d
+
+
+def _krr_builder(approx: bool, gamma0: float, n_components: int):
+    """Return (make_model, grid) for RBF Kernel Ridge (exact or Nystrom-approx)."""
+    if not approx:
+        from sklearn.kernel_ridge import KernelRidge
+        grid = [{"alpha": a, "gamma": g, "kernel": "rbf"}
+                for a in (1e-2, 1e-1, 1.0) for g in (None, 0.1, 1.0)]
+        return KernelRidge, grid
+    from sklearn.kernel_approximation import Nystroem
+    from sklearn.linear_model import Ridge
+    from sklearn.pipeline import make_pipeline
+
+    def make(alpha=1.0, gamma=gamma0, n_components=n_components):
+        return make_pipeline(
+            Nystroem(kernel="rbf", gamma=gamma, n_components=n_components,
+                     random_state=0),
+            Ridge(alpha=alpha))
+
+    grid = [{"alpha": a, "gamma": g}
+            for a in (1e-2, 1e-1, 1.0) for g in (gamma0 * 0.1, gamma0, gamma0 * 10)]
+    return make, grid
+
+
+def _svr_builder(approx: bool, gamma0: float, n_components: int):
+    """Return (make_model, grid) for RBF SVR (exact or RBFSampler+LinearSVR)."""
+    if not approx:
+        from sklearn.svm import SVR
+        return SVR, [{"C": c, "gamma": "scale", "kernel": "rbf"} for c in (1.0, 10.0)]
+    from sklearn.kernel_approximation import RBFSampler
+    from sklearn.pipeline import make_pipeline
+    from sklearn.svm import LinearSVR
+
+    def make(C=1.0, gamma=gamma0, n_components=n_components):
+        return make_pipeline(
+            RBFSampler(gamma=gamma, n_components=n_components, random_state=0),
+            LinearSVR(C=C, max_iter=5000))
+
+    grid = [{"C": c, "gamma": g}
+            for c in (1.0, 10.0) for g in (gamma0, gamma0 * 10)]
+    return make, grid
+
+
 def _fit_predict_sklearn(
     make_model: Callable,
     grid: List[dict],
@@ -75,18 +159,52 @@ def _fit_predict_sklearn(
     seed_idx: np.ndarray,
     seed_y: np.ndarray,
     residual_idx: np.ndarray,
+    pred_chunk: int = 100_000,
 ) -> Tuple[np.ndarray, dict]:
-    """Select hyperparameters on the S_s-val split, refit on the full seed set."""
+    """Select hyperparameters on the S_s-val split, refit on the (capped) seed set.
+
+    ``fit_idx`` / ``seed_idx`` are expected to be already subsampled by the
+    caller (``--max_train``); prediction on ``residual_idx`` runs in
+    ``pred_chunk`` batches so the residual x train kernel is never materialised.
+    """
     best, best_corr = None, -np.inf
     for params in grid:
         model = make_model(**params)
         model.fit(emb[fit_idx], fit_y)
-        corr = rc.pearson(model.predict(emb[val_idx]), val_y)
+        vp = _chunk_predict(model, emb, val_idx, pred_chunk)
+        corr = rc.pearson(vp, val_y)
         if not np.isnan(corr) and corr > best_corr:
             best_corr, best = corr, params
     model = make_model(**(best or {}))
     model.fit(emb[seed_idx], seed_y)
-    return model.predict(emb[residual_idx]), (best or {})
+    return _chunk_predict(model, emb, residual_idx, pred_chunk), (best or {})
+
+
+def _knn_graph(emb: np.ndarray, k: int, chunk: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Exact kNN graph over all N rows, built in memory-bounded row chunks.
+
+    Uses the ``||a-b||^2 = ||a||^2 + ||b||^2 - 2 a.b`` trick with a float32
+    ``chunk x N`` distance block (peak ~= chunk * N * 4 bytes), so memory stays
+    bounded regardless of N. Time is O(N^2 d); fine for medium N, gated for 1M.
+    Column 0 of the result is the self-match (distance 0), matching the
+    ``kneighbors`` convention the caller relies on.
+    """
+    n = emb.shape[0]
+    k = min(k, n)
+    sq = np.einsum("ij,ij->i", emb, emb)  # ||row||^2, float32
+    nbr = np.empty((n, k), dtype=np.int64)
+    dist = np.empty((n, k), dtype=np.float32)
+    for s in range(0, n, chunk):
+        q = emb[s:s + chunk]
+        d2 = sq[None, :] + np.einsum("ij,ij->i", q, q)[:, None] - 2.0 * (q @ emb.T)
+        np.maximum(d2, 0, out=d2)
+        part = np.argpartition(d2, kth=k - 1, axis=1)[:, :k]
+        rows = np.arange(part.shape[0])[:, None]
+        pd = d2[rows, part]
+        order = np.argsort(pd, axis=1)
+        nbr[s:s + chunk] = part[rows, order]
+        dist[s:s + chunk] = np.sqrt(pd[rows, order])
+    return dist, nbr
 
 
 def label_propagation(
@@ -96,18 +214,20 @@ def label_propagation(
     residual_idx: np.ndarray,
     k: int = 10,
     n_iter: int = 50,
+    knn_chunk: int = 512,
 ) -> np.ndarray:
-    """Transductive regression label propagation over a symmetric kNN graph."""
-    from sklearn.neighbors import NearestNeighbors
+    """Transductive regression label propagation over a symmetric kNN graph.
 
+    The kNN graph is built with :func:`_knn_graph` in ``knn_chunk`` row batches
+    (bounded memory) instead of ``NearestNeighbors.fit`` over the whole matrix.
+    """
     n = emb.shape[0]
-    nn = NearestNeighbors(n_neighbors=min(k + 1, n)).fit(emb)
-    dist, nbr = nn.kneighbors(emb)
+    dist, nbr = _knn_graph(emb, min(k + 1, n), knn_chunk)
     y = np.zeros(n)
     clamp = np.zeros(n, dtype=bool)
     y[seed_idx] = seed_y
     clamp[seed_idx] = True
-    sigma = np.median(dist[:, 1:]) + 1e-9
+    sigma = float(np.median(dist[:, 1:])) + 1e-9
     for _ in range(n_iter):
         w = np.exp(-(dist[:, 1:] ** 2) / (2 * sigma ** 2))
         w_sum = w.sum(axis=1) + 1e-12
@@ -123,11 +243,17 @@ def evaluate_baselines(
     val_frac: float,
     seed: int,
     methods: List[str],
+    max_train: int = 30_000,
+    pred_chunk: int = 100_000,
+    exact_max: int = 8_000,
+    n_components: int = 1_000,
+    label_prop_max: int = 200_000,
+    force_label_prop: bool = False,
+    knn_chunk: int = 512,
 ) -> Dict:
     from sklearn.ensemble import RandomForestRegressor
-    from sklearn.kernel_ridge import KernelRidge
-    from sklearn.svm import SVR
 
+    emb = _f32(emb)
     n = emb.shape[0]
     rng = np.random.default_rng(seed)
     seed_idx, residual_idx = rc.seed_and_residual(subset_scores, n)
@@ -136,9 +262,17 @@ def evaluate_baselines(
     full_all = rc.scores_to_array(full_scores, n)
     y_true = full_all[residual_idx]
 
-    print(f"[item4] n={n} seed={len(seed_idx)} residual={len(residual_idx)} ")
+    # Capped training sets for the heavy regressors (random subsample of S_s).
+    fit_c, fit_yc = _cap(fit_idx, s_all[fit_idx], max_train, rng)
+    val_c, val_yc = _cap(val_idx, s_all[val_idx], max_train, rng)
+    seed_c, seed_yc = _cap(seed_idx, s_all[seed_idx], max_train, rng)
+    approx = len(seed_c) > exact_max
+    gamma0 = _default_gamma(emb)
+
+    print(f"[item4] n={n} seed={len(seed_idx)} residual={len(residual_idx)} "
+          f"train_cap={len(seed_c)} approx_kernels={approx} dtype={emb.dtype}")
     assert len(residual_idx) != 0
-    
+
     def score(pred):
         return {
             "pearson": rc.pearson(pred, y_true),
@@ -156,53 +290,91 @@ def evaluate_baselines(
         dicts[name] = d
 
     if "knn_weighted" in methods:
-        # select k on val (deployable), then extrapolate residual
+        # select k on the (capped) val split (deployable, non-oracle), then
+        # extrapolate the residual from the full seed set (the paper's reference).
         best_k, best_c = 20, -np.inf
         for k in (5, 10, 20, 50):
-            continue
-            p = knn_extrapolate(emb, fit_idx, s_all[fit_idx], val_idx, k)
-            c = rc.pearson(p, s_all[val_idx])
-            if c > best_c:
+            p = knn_extrapolate(emb, fit_c, fit_yc, val_c, k)
+            c = rc.pearson(p, val_yc)
+            if not np.isnan(c) and c > best_c:
                 best_c, best_k = c, k
         register(
             "knn_weighted",
             knn_extrapolate(emb, seed_idx, s_all[seed_idx], residual_idx, best_k),
         )
 
-    if "kernel_ridge" in methods:
-        grid = [{"alpha": a, "gamma": g, "kernel": "rbf"}
-                for a in (1e-2, 1e-1, 1.0) for g in (None, 0.1, 1.0)]
+    if "knn_mean" in methods:
+        # unweighted KNN ablation: same k-selection, uniform averaging.
+        best_k, best_c = 20, -np.inf
+        for k in (5, 10, 20, 50):
+            p = knn_extrapolate(emb, fit_c, fit_yc, val_c, k, weighted=False)
+            c = rc.pearson(p, val_yc)
+            if not np.isnan(c) and c > best_c:
+                best_c, best_k = c, k
+        register(
+            "knn_mean",
+            knn_extrapolate(emb, seed_idx, s_all[seed_idx], residual_idx,
+                            best_k, weighted=False),
+        )
+
+    if "ridge" in methods:
+        from sklearn.linear_model import Ridge
+        grid = [{"alpha": a} for a in (1e-2, 1e-1, 1.0, 10.0)]
         pred, _ = _fit_predict_sklearn(
-            KernelRidge, grid, emb, fit_idx, s_all[fit_idx], val_idx,
-            s_all[val_idx], seed_idx, s_all[seed_idx], residual_idx)
+            Ridge, grid, emb, fit_c, fit_yc, val_c, val_yc,
+            seed_c, seed_yc, residual_idx, pred_chunk)
+        register("ridge", pred)
+
+    if "hist_gbr" in methods:
+        from sklearn.ensemble import HistGradientBoostingRegressor
+        grid = [{"learning_rate": lr, "max_iter": 300, "max_depth": md,
+                 "random_state": seed}
+                for lr in (0.05, 0.1) for md in (None, 8)]
+        pred, _ = _fit_predict_sklearn(
+            HistGradientBoostingRegressor, grid, emb, fit_c, fit_yc,
+            val_c, val_yc, seed_c, seed_yc, residual_idx, pred_chunk)
+        register("hist_gbr", pred)
+
+    if "kernel_ridge" in methods:
+        make, grid = _krr_builder(approx, gamma0, n_components)
+        pred, _ = _fit_predict_sklearn(
+            make, grid, emb, fit_c, fit_yc, val_c, val_yc,
+            seed_c, seed_yc, residual_idx, pred_chunk)
         register("kernel_ridge", pred)
 
     if "svr_rbf" in methods:
-        grid = [{"C": c, "gamma": "scale", "kernel": "rbf"} for c in (1.0, 10.0)]
+        make, grid = _svr_builder(approx, gamma0, n_components)
         pred, _ = _fit_predict_sklearn(
-            SVR, grid, emb, fit_idx, s_all[fit_idx], val_idx,
-            s_all[val_idx], seed_idx, s_all[seed_idx], residual_idx)
+            make, grid, emb, fit_c, fit_yc, val_c, val_yc,
+            seed_c, seed_yc, residual_idx, pred_chunk)
         register("svr_rbf", pred)
 
     if "random_forest" in methods:
-        grid = [{"n_estimators": 200, "max_depth": md, "random_state": seed}
-                for md in (None, 8, 16)]
+        grid = [{"n_estimators": 200, "max_depth": md, "random_state": seed,
+                 "n_jobs": -1} for md in (None, 8, 16)]
         pred, _ = _fit_predict_sklearn(
-            RandomForestRegressor, grid, emb, fit_idx, s_all[fit_idx], val_idx,
-            s_all[val_idx], seed_idx, s_all[seed_idx], residual_idx)
+            RandomForestRegressor, grid, emb, fit_c, fit_yc, val_c, val_yc,
+            seed_c, seed_yc, residual_idx, pred_chunk)
         register("random_forest", pred)
 
     if "label_prop" in methods:
-        register(
-            "label_prop",
-            label_propagation(emb, seed_idx, s_all[seed_idx], residual_idx),
-        )
+        if n > label_prop_max and not force_label_prop:
+            print(f"[item4] label_prop SKIPPED: n={n} > label_prop_max="
+                  f"{label_prop_max} (transductive O(N^2)); pass "
+                  f"--force_label_prop to run the chunked brute-force graph.")
+        else:
+            register(
+                "label_prop",
+                label_propagation(emb, seed_idx, s_all[seed_idx], residual_idx,
+                                  knn_chunk=knn_chunk),
+            )
 
     return {"n": int(n), "n_seed": int(len(seed_idx)),
             "metrics": results, "score_dicts": dicts}
 
 
-ALL_METHODS = ["knn_weighted", "kernel_ridge", "svr_rbf", "random_forest", "label_prop"]
+ALL_METHODS = ["knn_weighted", "knn_mean", "ridge", "kernel_ridge", "svr_rbf",
+               "hist_gbr", "random_forest", "label_prop"]
 
 
 def _print(res: Dict) -> None:
@@ -232,6 +404,22 @@ def main() -> None:
     ap.add_argument("--methods", nargs="+", default=ALL_METHODS, choices=ALL_METHODS)
     ap.add_argument("--val_frac", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--max_train", type=int, default=30_000,
+                    help="cap the random S_s subsample used to TRAIN the heavy "
+                         "regressors (kernel_ridge/svr/rf); 0 disables the cap")
+    ap.add_argument("--pred_chunk", type=int, default=100_000,
+                    help="batch size for chunked prediction over the residual set")
+    ap.add_argument("--exact_max", type=int, default=8_000,
+                    help="train size above which kernel_ridge/svr switch from "
+                         "exact RBF to the linear-memory approximation")
+    ap.add_argument("--n_components", type=int, default=1_000,
+                    help="landmarks / random Fourier features for the approx kernels")
+    ap.add_argument("--label_prop_max", type=int, default=200_000,
+                    help="skip label_prop above this N (transductive O(N^2))")
+    ap.add_argument("--force_label_prop", action="store_true",
+                    help="run label_prop even above --label_prop_max")
+    ap.add_argument("--knn_chunk", type=int, default=512,
+                    help="row-chunk for the memory-bounded label_prop kNN graph")
     ap.add_argument("--out_metrics",default=f"{Outfolder}/item4_baseline_metrics.json",
                     help="path to dump JSON metrics dict")
     ap.add_argument("--out_scores_dir", default=f"{Outfolder}/item4_baseline_scores",
@@ -244,11 +432,16 @@ def main() -> None:
     if not (args.embeddings and args.subset_scores and args.full_scores):
         ap.error("--embeddings, --subset_scores, --full_scores required (or --smoke)")
 
-    emb = rc.load_embeddings(args.embeddings)
+    emb = rc.load_embeddings(args.embeddings, dtype=np.float32)
     subset = rc.load_scores(args.subset_scores)
     full = rc.load_scores(args.full_scores)
     print(f"[item4] running baselines on {len(list(subset.keys()))} subset scores, {len(list(full.keys()))} full scores")
-    res = evaluate_baselines(emb, subset, full, args.val_frac, args.seed, args.methods)
+    res = evaluate_baselines(
+        emb, subset, full, args.val_frac, args.seed, args.methods,
+        max_train=args.max_train, pred_chunk=args.pred_chunk,
+        exact_max=args.exact_max, n_components=args.n_components,
+        label_prop_max=args.label_prop_max,
+        force_label_prop=args.force_label_prop, knn_chunk=args.knn_chunk)
     _print(res)
     if args.out_metrics:
         rc.save_json({"n": res["n"], "n_seed": res["n_seed"],

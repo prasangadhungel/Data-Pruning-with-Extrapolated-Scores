@@ -69,10 +69,6 @@ def knn_extrapolate(
 
     metric = "cosine" if distance == "cosine" else "minkowski"
     k = min(k, len(src_idx))
-    print(emb.shape, len(src_idx), len(tgt_idx), k, distance, weighted)
-    print(src_idx,tgt_idx)
-    #assert True
-    #assert False
     nn = NearestNeighbors(n_neighbors=k, metric=metric)
     nn.fit(emb[src_idx])
     dist, nbr = nn.kneighbors(emb[tgt_idx])  # [T, k]
