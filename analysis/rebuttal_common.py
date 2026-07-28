@@ -214,6 +214,31 @@ def bootstrap_ci(
     return (float(lo), float(hi))
 
 
+def cohen_kappa(a: np.ndarray, b: np.ndarray) -> float:
+    """Cohen's kappa: chance-corrected agreement between two labellings.
+
+    ``po`` is the observed agreement rate; ``pe`` is the agreement expected by
+    chance from the two marginal label distributions. ``kappa = (po - pe)/(1 - pe)``
+    is 1 for perfect agreement, 0 for chance-level agreement, and negative for
+    systematic disagreement. Preferred over raw agreement because raw agreement
+    is inflated when both labellings share the same skewed marginals (e.g. two
+    accurate classifiers agree a lot simply by both usually being right).
+    """
+    a = np.asarray(a)
+    b = np.asarray(b)
+    n = len(a)
+    if n == 0:
+        return float("nan")
+    po = float(np.mean(a == b))
+    cats = np.unique(np.concatenate([np.asarray(a).ravel(), np.asarray(b).ravel()]))
+    pe = 0.0
+    for c in cats:
+        pe += float(np.mean(a == c)) * float(np.mean(b == c))
+    if pe >= 1.0:
+        return 1.0 if po >= 1.0 else float("nan")
+    return float((po - pe) / (1.0 - pe))
+
+
 def mcnemar_test(correct_a: np.ndarray, correct_b: np.ndarray) -> Dict[str, float]:
     """Paired McNemar test on two models' per-sample correctness (same test set).
 

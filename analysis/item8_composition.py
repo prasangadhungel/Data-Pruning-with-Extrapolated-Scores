@@ -259,6 +259,62 @@ def _soft_jaccard(full_scores, ext_scores, keep: float, tol_frac: float = 0.02) 
     return float(soft_inter / union) if union else 1.0
 
 
+def _class_distribution_check(
+    labels: np.ndarray, gt_keep: set, ex_keep: set, classes: List[int]
+) -> Dict:
+    """Class-balance diagnostics for a pruned keep-set.
+
+    Pruning by score does NOT sample uniformly across classes, so a keep-set can
+    drift away from the original class distribution (and the GT and extrapolated
+    keep-sets can drift differently). This reports, for both the GT-pruned and the
+    extrapolation-pruned keep-set, how far the RETAINED class distribution is from
+    the ORIGINAL full-data class distribution -- plus how heterogeneous per-class
+    retention rates are. All distributions are over ``classes`` (sorted class ids).
+
+    Keys (``gt``/``ext`` blocks):
+      tv_from_original   : total-variation distance = 0.5 * L1 between the retained
+                           class distribution and the original one (0 = identical
+                           balance, 1 = disjoint). The headline "did balance shift?"
+      kl_from_original   : KL(retained || original) in nats (asymmetric; large when
+                           some class is over-represented after pruning).
+      max_abs_dev        : largest |p_retained(c) - p_original(c)| over classes.
+      max_dev_class      : the class id attaining ``max_abs_dev``.
+      retention_rate_min/max/std : spread of per-class retention rate
+                           (kept_c / original_c). A wide spread means pruning hits
+                           some classes far harder than others.
+      worst_pruned_class : class with the LOWEST retention rate (most pruned).
+    Top-level also carries ``class_dist_l1_gt_vs_ext`` (GT-kept vs ext-kept, the
+    original pairwise check) so both "vs original" and "vs each other" are visible.
+    """
+    orig = np.array([int(np.sum(labels == c)) for c in classes], dtype=float)
+    orig_p = orig / (orig.sum() + 1e-12)
+
+    def _block(keep: set) -> Dict:
+        kept = np.array([sum(1 for i in keep if int(labels[i]) == c)
+                         for c in classes], dtype=float)
+        kept_p = kept / (kept.sum() + 1e-12)
+        tv = 0.5 * float(np.abs(kept_p - orig_p).sum())
+        kl = float(np.sum(np.where(kept_p > 0,
+                                   kept_p * np.log((kept_p + 1e-12) / (orig_p + 1e-12)),
+                                   0.0)))
+        abs_dev = np.abs(kept_p - orig_p)
+        j = int(np.argmax(abs_dev))
+        ret_rate = kept / (orig + 1e-12)
+        worst = int(np.argmin(ret_rate))
+        return {
+            "tv_from_original": tv,
+            "kl_from_original": kl,
+            "max_abs_dev": float(abs_dev[j]),
+            "max_dev_class": int(classes[j]),
+            "retention_rate_min": float(ret_rate.min()),
+            "retention_rate_max": float(ret_rate.max()),
+            "retention_rate_std": float(ret_rate.std()),
+            "worst_pruned_class": int(classes[worst]),
+        }
+
+    return {"gt": _block(gt_keep), "ext": _block(ex_keep)}
+
+
 def composition(
     full_scores: Dict[int, float],
     extrapolated_scores: Dict[int, float],
@@ -291,6 +347,7 @@ def composition(
         ex_vec /= ex_vec.sum() + 1e-9
         class_l1 = float(np.abs(gt_vec - ex_vec).sum())
 
+        class_dist = _class_distribution_check(labels, gt_keep, ex_keep, classes)
         # oversmoothing probe: GT-dropped tail that extrapolation rescues, etc.
         gt_drop = set(range(n)) - gt_keep
         rescued = len(gt_drop & ex_keep)  # GT would drop, extrapolation keeps
@@ -305,6 +362,8 @@ def composition(
             "score_mass_recovery": mass_rec,
             "agreement": agreement,
             "class_balance_l1": class_l1,
+            "class_dist_l1_gt_vs_ext": class_l1,
+            "class_distribution": class_dist,
             "retained_score_mean_gt": float(full_arr[list(gt_keep)].mean()),
             "retained_score_mean_ext_on_gtscale": float(full_arr[list(ex_keep)].mean()),
             "rescued_gt_dropped": rescued,
@@ -326,6 +385,16 @@ def _print(res: Dict) -> None:
             f"{r['class_balance_l1']:.3f}", f"{r['retained_score_mean_gt']:.3f}",
             f"{r['retained_score_mean_ext_on_gtscale']:.3f}",
             r["rescued_gt_dropped"], r["newly_dropped_gt_kept"])))
+    print("  class-distribution drift from ORIGINAL balance (TV | KL | "
+          "min-retention-rate, worst class):")
+    for r in res["rows"]:
+        cd = r["class_distribution"]
+        g, e = cd["gt"], cd["ext"]
+        print(f"    prune={r['prune_rate']:<5} "
+              f"GT  TV={g['tv_from_original']:.3f} KL={g['kl_from_original']:.3f} "
+              f"minRet={g['retention_rate_min']:.3f}(cls {g['worst_pruned_class']}) | "
+              f"EXT TV={e['tv_from_original']:.3f} KL={e['kl_from_original']:.3f} "
+              f"minRet={e['retention_rate_min']:.3f}(cls {e['worst_pruned_class']})")
 
 
 def run_smoke() -> Dict:

@@ -214,8 +214,21 @@ def behavior_preservation(
                            ``only_gt_correct``/``only_ext_correct`` are McNemar b/c.
     prediction_agreement : fraction of samples where the two models emit the SAME
                            predicted label (right or wrong). ``*_ci`` = Wilson.
+                           NOTE: raw agreement is inflated by chance / class skew,
+                           so prefer ``cohen_kappa_pred`` below for a headline number.
+    cohen_kappa_pred     : Cohen's kappa on the two models' PREDICTED LABELS --
+                           chance-corrected agreement (1 = identical predictions,
+                           0 = only chance-level agreement, <0 = anti-correlated).
+                           This is the recommended single agreement metric.
+    cohen_kappa_correct  : Cohen's kappa on per-sample CORRECTNESS (right/wrong) --
+                           chance-corrected version of ``error_agreement``.
     error_agreement      : fraction of samples where the two models are BOTH right
                            or BOTH wrong (agreement on correctness). ``*_ci`` = Wilson.
+                           It is < 1 whenever the models have any discordant samples
+                           (one right, the other wrong) -- i.e. the McNemar b + c
+                           counts -- which is expected, since the two models were
+                           trained on differently pruned data and never fail on
+                           EXACTLY the same examples.
     mcnemar              : paired McNemar test on per-sample correctness -- ``b``/``c``
                            discordant counts, ``statistic`` (chi-square, 1 dof, with
                            continuity correction) and ``p_value``. Small p => the two
@@ -340,6 +353,8 @@ def behavior_preservation(
         "prediction_agreement": float(np.mean(pred_gt == pred_ext)),
         "prediction_agreement_ci": wilson_ci(
             int(np.sum(pred_gt == pred_ext)), n, z),
+        "cohen_kappa_pred": rc.cohen_kappa(pred_gt, pred_ext),
+        "cohen_kappa_correct": rc.cohen_kappa(correct_gt, correct_ext),
         "error_agreement": float(np.mean((~correct_gt) == (~correct_ext))),
         "error_agreement_ci": wilson_ci(
             int(np.sum((~correct_gt) == (~correct_ext))), n, z),
@@ -379,6 +394,9 @@ def _print(res: Dict) -> None:
                     f"(n={cell['n']})")
     logger.info(f"  prediction agreement= {res['prediction_agreement']:.4f} "
                 f"{_ci(res['prediction_agreement_ci'])}")
+    logger.info(f"  Cohen kappa (pred)  = {res['cohen_kappa_pred']:.4f}  "
+                f"(chance-corrected; recommended agreement metric)")
+    logger.info(f"  Cohen kappa (correct)= {res['cohen_kappa_correct']:.4f}")
     logger.info(f"  error agreement     = {res['error_agreement']:.4f} "
                 f"{_ci(res['error_agreement_ci'])}")
     mc = res["mcnemar"]
