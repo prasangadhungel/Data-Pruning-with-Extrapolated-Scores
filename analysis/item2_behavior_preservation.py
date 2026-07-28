@@ -9,24 +9,46 @@ with the extrapolated scores -- and quantifies whether they behave the same:
   * error-set overlap (Jaccard) and prediction agreement;
   * per-class / worst-group / tail accuracy gaps.
 
-On the real machine the predictions come from loaded checkpoints (the repo
-already loads ``*_model.pth`` in ``analysis/analyse_scores.py``); use
-``predict_from_checkpoint`` for that. For standalone/CI use, the script also
-accepts prediction arrays saved as ``.npz`` with fields
-``sample_idx, label, pred``.
+On the real machine the predictions are computed DIRECTLY from the pruned
+downstream checkpoints (default mode): the script builds the downstream model +
+test loader, loads each checkpoint, and runs test predictions via
+``predict_from_checkpoint``. Defaults compare the GT-score-pruned PLACES_365 TDDS
+model against the KNN-extrapolation-pruned model (swap ``--ckpt_ext`` to the GNN
+checkpoint). For standalone/CI use, pass ``--pred_gt``/``--pred_ext`` ``.npz``
+arrays (fields ``sample_idx, label, pred``) to bypass checkpoint loading.
 
-Self-test:
+Run directly (real machine, all defaults):
+    python analysis/item2_behavior_preservation.py
+
+Self-test (no torch, no data):
     python analysis/item2_behavior_preservation.py --smoke
 """
 
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 from typing import Dict, Optional
 
 import numpy as np
-from loguru import logger
+try:
+    from loguru import logger
+    logger.remove()
+    logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
+except ModuleNotFoundError:  # loguru optional: fall back to stdlib logging
+    import logging
+    logging.basicConfig(
+        level=logging.INFO, stream=sys.stdout,
+        format="%(asctime)s - %(message)s", datefmt="%m-%d %H:%M",
+    )
+    logger = logging.getLogger("item2")
 import rebuttal_common as rc
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SRC = os.path.join(_REPO_ROOT, "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
 
 # ---------------------------------------------------------------------------
 # DATA TO LOAD (real run). Root on the shared store:
@@ -49,14 +71,41 @@ import rebuttal_common as rc
 # ---------------------------------------------------------------------------
 
 ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
-gnn_extra_checkpoint = f"/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/pruned_models/PLACES_365/gnn__TDDS_PLACES_365_resnet50-self-trained_k_10_seed_360692_euclidean_5_31/model_pruned_80.pth"
-knn_extra_checkpoint = f"/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/pruned_models/PLACES_365/knn_TDDS_PLACES_365_weighted_resnet50-self-trained_k_20_seed_360692_euclidean__5_31/model_pruned_80.pth"
+gnn_extra_checkpoint = f"{ROOT}/models/pruned_models/PLACES_365/gnn__TDDS_PLACES_365_resnet50-self-trained_k_10_seed_360692_euclidean_5_31/model_pruned_80.pth"
+knn_extra_checkpoint = f"{ROOT}/models/pruned_models/PLACES_365/knn_TDDS_PLACES_365_weighted_resnet50-self-trained_k_20_seed_360692_euclidean__5_31/model_pruned_80.pth"
 original_score_checkpoint = f"{ROOT}/models/pruned_models/PLACES_365/tdds/PLACES_365_last_tdds_0/model_pruned_80.pth"
 
-#todo change to use models and run predictions from checkpoints instead of npz files, since the checkpoints exist now
 
-logger.remove()
-logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
+def build_model_and_testloader(
+    dataset: str,
+    ref_ckpt: str,
+    model_name: str,
+    num_classes: int,
+    image_size: int,
+    batch_size: int,
+    num_workers: int,
+    device,
+):
+    """Build the downstream architecture + the shared test loader (real machine).
+
+    ``ref_ckpt`` is only used so ``load_model_by_name`` can instantiate the right
+    architecture; ``predict_from_checkpoint`` reloads the per-model state anyway,
+    so the same model object is reused for GT and extrapolation checkpoints.
+    """
+    import torch
+    from torch.utils.data import DataLoader
+
+    from utils.dataset import get_dataset
+    from utils.models import load_model_by_name
+
+    _train, testset = get_dataset(dataset)
+    logger.info(f"[item2] {dataset} testset size={len(testset)}")
+    model = load_model_by_name(model_name, num_classes, image_size, ref_ckpt, device)
+    test_loader = DataLoader(
+        testset, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=(getattr(device, "type", "cpu") == "cuda"),
+    )
+    return model, test_loader
 
 def predict_from_checkpoint(checkpoint_path, model, test_loader, device="cuda"):
     """Per-sample test predictions from a loaded model (real-machine path).
@@ -175,11 +224,67 @@ def run_smoke() -> Dict:
     return res
 
 
+def _align_preds(gt_triple, ext_triple):
+    """Align two (idx,label,pred) triples on their common sample_idx order."""
+    gi, gl, gp = gt_triple
+    ei, el, ep = ext_triple
+    common = np.intersect1d(gi, ei)
+    if len(common) == 0:
+        raise ValueError("GT and extrapolation predictions share no sample_idx.")
+    g_map = {int(i): j for j, i in enumerate(gi)}
+    e_map = {int(i): j for j, i in enumerate(ei)}
+    gsel = np.array([g_map[int(i)] for i in common])
+    esel = np.array([e_map[int(i)] for i in common])
+    label = gl[gsel]
+    assert np.array_equal(label, el[esel]), "label mismatch on shared sample_idx"
+    return label, gp[gsel], ep[esel]
+
+
+def run_from_checkpoints(args) -> Dict:
+    """Load pruned downstream checkpoints, run test predictions, compare behaviour."""
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"[item2] device={device} dataset={args.dataset}")
+    model, test_loader = build_model_and_testloader(
+        args.dataset, args.ckpt_gt, args.model_name, args.num_classes,
+        args.image_size, args.batch_size, args.num_workers, device,
+    )
+    logger.info(f"[item2] GT-pruned ckpt : {args.ckpt_gt}")
+    gt_triple = predict_from_checkpoint(args.ckpt_gt, model, test_loader, device)
+    logger.info(f"[item2] extrap  ckpt : {args.ckpt_ext}")
+    ext_triple = predict_from_checkpoint(args.ckpt_ext, model, test_loader, device)
+
+    label, pred_gt, pred_ext = _align_preds(gt_triple, ext_triple)
+    cf = np.load(args.class_freq) if args.class_freq else None
+    res = behavior_preservation(label, pred_gt, pred_ext, args.tail_frac, cf)
+    res["ckpt_gt"] = args.ckpt_gt
+    res["ckpt_ext"] = args.ckpt_ext
+    _print(res)
+    if args.out:
+        rc.save_json(res, args.out)
+        logger.info(f"[item2] wrote {args.out}")
+    return res
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Item 2: behavior preservation")
     ap.add_argument("--smoke", action="store_true")
-    ap.add_argument("--pred_gt", help="npz with sample_idx,label,pred (GT-pruned model)")
-    ap.add_argument("--pred_ext", help="npz with sample_idx,label,pred (extrap-pruned)")
+    # --- checkpoint mode (real machine; default) --------------------------------
+    ap.add_argument("--ckpt_gt", default=original_score_checkpoint,
+                    help="downstream model pruned with GT scores (default: PLACES_365 TDDS)")
+    ap.add_argument("--ckpt_ext", default=knn_extra_checkpoint,
+                    help="downstream model pruned with extrapolated scores "
+                         "(default: KNN; pass the gnn_extra_checkpoint for the GNN variant)")
+    ap.add_argument("--dataset", default="PLACES_365")
+    ap.add_argument("--model-name", default="resnet50-self-trained")
+    ap.add_argument("--num-classes", type=int, default=365)
+    ap.add_argument("--image-size", type=int, default=64)
+    ap.add_argument("--batch-size", type=int, default=256)
+    ap.add_argument("--num-workers", type=int, default=4)
+    # --- npz fallback (standalone / CI) -----------------------------------------
+    ap.add_argument("--pred_gt", help="npz sample_idx,label,pred (skips checkpoint mode)")
+    ap.add_argument("--pred_ext", help="npz sample_idx,label,pred (skips checkpoint mode)")
     ap.add_argument("--tail_frac", type=float, default=0.2)
     ap.add_argument("--class_freq", help="optional npy of per-class train frequency")
     ap.add_argument("--out")
@@ -188,18 +293,20 @@ def main() -> None:
     if args.smoke:
         run_smoke()
         return
-    if not (args.pred_gt and args.pred_ext):
-        ap.error("need --pred_gt and --pred_ext npz files (or --smoke)")
 
-    label_gt, pred_gt = _load_pred_npz(args.pred_gt)
-    label_ext, pred_ext = _load_pred_npz(args.pred_ext)
-    assert np.array_equal(label_gt, label_ext), "test label order mismatch"
-    cf = np.load(args.class_freq) if args.class_freq else None
-    res = behavior_preservation(label_gt, pred_gt, pred_ext, args.tail_frac, cf)
-    _print(res)
-    if args.out:
-        rc.save_json(res, args.out)
-        logger.info(f"[item2] wrote {args.out}")
+    if args.pred_gt and args.pred_ext:  # explicit npz fallback
+        label_gt, pred_gt = _load_pred_npz(args.pred_gt)
+        label_ext, pred_ext = _load_pred_npz(args.pred_ext)
+        assert np.array_equal(label_gt, label_ext), "test label order mismatch"
+        cf = np.load(args.class_freq) if args.class_freq else None
+        res = behavior_preservation(label_gt, pred_gt, pred_ext, args.tail_frac, cf)
+        _print(res)
+        if args.out:
+            rc.save_json(res, args.out)
+            logger.info(f"[item2] wrote {args.out}")
+        return
+
+    run_from_checkpoints(args)
 
 
 if __name__ == "__main__":
