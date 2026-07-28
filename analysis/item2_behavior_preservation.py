@@ -17,8 +17,17 @@ model against the KNN-extrapolation-pruned model (swap ``--ckpt_ext`` to the GNN
 checkpoint). For standalone/CI use, pass ``--pred_gt``/``--pred_ext`` ``.npz``
 arrays (fields ``sample_idx, label, pred``) to bypass checkpoint loading.
 
+OOD robustness: pass ``--corruption`` (e.g. ``gaussian_blur``) with ``--severity``
+1..5 to apply an ImageNet-C-style perturbation to the test set ON THE FLY (see
+``perturbations.py``). Both models are evaluated on the SAME corrupted inputs, so
+the behaviour-preservation metrics then report whether score extrapolation still
+matches the GT-pruned model under a blurry/noisy distribution shift.
+
 Run directly (real machine, all defaults):
     python analysis/item2_behavior_preservation.py
+
+Run with a blurry OOD test set:
+    python analysis/item2_behavior_preservation.py --corruption gaussian_blur --severity 3
 
 Self-test (no torch, no data):
     python analysis/item2_behavior_preservation.py --smoke
@@ -44,6 +53,7 @@ except ModuleNotFoundError:  # loguru optional: fall back to stdlib logging
     )
     logger = logging.getLogger("item2")
 import rebuttal_common as rc
+import perturbations
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SRC = os.path.join(_REPO_ROOT, "src")
@@ -85,12 +95,20 @@ def build_model_and_testloader(
     batch_size: int,
     num_workers: int,
     device,
+    corruption: str = "none",
+    severity: int = 3,
+    corruption_seed: int = 0,
 ):
     """Build the downstream architecture + the shared test loader (real machine).
 
     ``ref_ckpt`` is only used so ``load_model_by_name`` can instantiate the right
     architecture; ``predict_from_checkpoint`` reloads the per-model state anyway,
     so the same model object is reused for GT and extrapolation checkpoints.
+
+    When ``corruption`` is not ``"none"`` the test set is wrapped in
+    :class:`perturbations.CorruptedDataset`, so an ImageNet-C-style perturbation
+    (e.g. a blur) is applied to every test image ON THE FLY. Both the GT-pruned
+    and extrapolation-pruned models are then evaluated on the SAME OOD inputs.
     """
     import torch
     from torch.utils.data import DataLoader
@@ -100,6 +118,14 @@ def build_model_and_testloader(
 
     _train, testset = get_dataset(dataset)
     logger.info(f"[item2] {dataset} testset size={len(testset)}")
+    if corruption and corruption != "none":
+        testset = perturbations.CorruptedDataset(
+            testset, corruption, severity=severity, seed=corruption_seed
+        )
+        logger.info(
+            f"[item2] OOD test corruption='{corruption}' severity={severity} "
+            f"(applied on the fly)"
+        )
     model = load_model_by_name(model_name, num_classes, image_size, ref_ckpt, device)
     test_loader = DataLoader(
         testset, batch_size=batch_size, shuffle=False,
@@ -220,6 +246,24 @@ def run_smoke() -> Dict:
     _print(res)
     assert res["error_agreement"] > 0.8, res["error_agreement"]
     assert res["error_set_jaccard"] > 0.5
+
+    # OOD corruption path: ImageNet-C-style blur applied on the fly (torch-free)
+    class _NumpyImgDS:
+        def __init__(self, n, rng):
+            self.imgs = [rng.random((3, 16, 16)).astype(np.float32) for _ in range(n)]
+
+        def __len__(self):
+            return len(self.imgs)
+
+        def __getitem__(self, i):
+            return self.imgs[i], int(label[i % len(label)]), i
+
+    ds = perturbations.CorruptedDataset(_NumpyImgDS(8, rng), "gaussian_blur", 3, seed=1)
+    corr_img, corr_lab, corr_idx = ds[2]
+    assert corr_img.shape == (3, 16, 16) and corr_idx == 2
+    assert not np.allclose(corr_img, ds.base[2][0]), "corruption left image unchanged"
+    logger.info(f"  OOD corruption smoke ok (gaussian_blur, {len(ds)} imgs)")
+
     logger.info("[item2] SMOKE PASSED")
     return res
 
@@ -249,6 +293,8 @@ def run_from_checkpoints(args) -> Dict:
     model, test_loader = build_model_and_testloader(
         args.dataset, args.ckpt_gt, args.model_name, args.num_classes,
         args.image_size, args.batch_size, args.num_workers, device,
+        corruption=args.corruption, severity=args.severity,
+        corruption_seed=args.corruption_seed,
     )
     logger.info(f"[item2] GT-pruned ckpt : {args.ckpt_gt}")
     gt_triple = predict_from_checkpoint(args.ckpt_gt, model, test_loader, device)
@@ -260,6 +306,8 @@ def run_from_checkpoints(args) -> Dict:
     res = behavior_preservation(label, pred_gt, pred_ext, args.tail_frac, cf)
     res["ckpt_gt"] = args.ckpt_gt
     res["ckpt_ext"] = args.ckpt_ext
+    res["corruption"] = args.corruption
+    res["severity"] = args.severity if args.corruption != "none" else None
     _print(res)
     if args.out:
         rc.save_json(res, args.out)
@@ -282,6 +330,16 @@ def main() -> None:
     ap.add_argument("--image-size", type=int, default=64)
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--num-workers", type=int, default=4)
+    # --- ImageNet-C-style on-the-fly OOD test corruption ------------------------
+    ap.add_argument(
+        "--corruption", default="none", choices=list(perturbations.CORRUPTION_CHOICES),
+        help="apply an ImageNet-C-like perturbation (e.g. a blur) to the test set "
+             "on the fly; both models are evaluated on the SAME corrupted inputs",
+    )
+    ap.add_argument("--severity", type=int, default=3, choices=list(perturbations.SEVERITIES),
+                    help="corruption severity 1..5 (ignored when --corruption none)")
+    ap.add_argument("--corruption-seed", type=int, default=0,
+                    help="seed for the on-the-fly corruption noise")
     # --- npz fallback (standalone / CI) -----------------------------------------
     ap.add_argument("--pred_gt", help="npz sample_idx,label,pred (skips checkpoint mode)")
     ap.add_argument("--pred_ext", help="npz sample_idx,label,pred (skips checkpoint mode)")

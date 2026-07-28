@@ -485,7 +485,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["CIFAR10", "CIFAR100", "SYNTHETIC_CIFAR100_1M","PLACES_365","IMAGENET"],
+        choices=["CIFAR10", "CIFAR100", "SYNTHETIC_CIFAR100_1M", "SYNTHETIC_CIFAR100_1M_LT", "PLACES_365", "IMAGENET"],
         help="Dataset to use for training"
     )
     

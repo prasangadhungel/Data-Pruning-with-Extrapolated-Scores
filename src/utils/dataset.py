@@ -96,6 +96,36 @@ class CustomDatasetWithIndices(Dataset):
         return image, label, index
 
 
+def make_longtail_indices(labels, imb_factor: float = 0.01, seed: int = 0):
+    """Subsample sample indices to an exponential CIFAR-100-LT profile.
+
+    Class ``c`` (ranked by frequency, head first) keeps
+    ``n_c = n_max_c * imb_factor ** (rank / (C - 1))`` samples, where
+    ``imb_factor`` is the ratio of the rarest to the most frequent class.
+    Returns the kept indices (sorted) and the per-class target sizes.
+    """
+    labels = np.asarray(labels)
+    rng = np.random.default_rng(seed)
+    classes = sorted(set(labels.tolist()))
+    counts = {c: int((labels == c).sum()) for c in classes}
+    # most-frequent class first so rank 0 is the head
+    ordered = sorted(classes, key=lambda c: -counts[c])
+    C = len(ordered)
+
+    sizes = {}
+    keep = []
+    for rank, c in enumerate(ordered):
+        frac = imb_factor ** (rank / max(1, C - 1))
+        target = max(1, int(round(counts[c] * frac)))
+        idx_c = np.nonzero(labels == c)[0]
+        take = min(target, len(idx_c))
+        sizes[c] = take
+        keep.append(rng.choice(idx_c, size=take, replace=False))
+
+    indices = np.sort(np.concatenate(keep))
+    return indices, sizes
+
+
 def get_transforms(mean, std, from_numpy=False, dataset_name="CIFAR10"):
     if dataset_name == "PLACES_365":
         # transform_train = transforms.Compose(
@@ -280,7 +310,35 @@ def get_dataset(dataset_name: str):
         )
         testset = None
 
-    elif dataset_name == "IMAGENET":
+    elif dataset_name == "SYNTHETIC_CIFAR100_1M_LT":
+        mean_cifar100_syn = (0.5194, 0.4991, 0.4573)
+        std_cifar100_syn = (0.2748, 0.2640, 0.2858)
+
+        data = np.load(
+            "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/data/cifar100_1m.npz"
+        )
+
+        all_images = data["image"]
+        all_labels = data["label"]
+
+        # Build an exponential CIFAR-100-LT profile over the synthetic pool.
+        lt_indices, _ = make_longtail_indices(
+            all_labels, imb_factor=0.01, seed=0
+        )
+
+        train_images = all_images[lt_indices]
+        train_labels = all_labels[lt_indices]
+        # keep original sample ids so scores/embeddings stay aligned
+        indices = lt_indices
+
+        transform_train, transform_test = get_transforms(
+            mean_cifar100_syn, std_cifar100_syn, from_numpy=True
+        )
+
+        trainset = CustomDatasetWithIndices(
+            train_images, train_labels, indices, transform=transform_train
+        )
+        testset = None
         mean_imagenet = (0.449, 0.426, 0.379)
         std_imagenet = (0.285, 0.276, 0.284)
 
@@ -350,7 +408,7 @@ def get_dataloaders_from_dataset(trainset, testset, batch_size: int = 128):
 
 
 def prepare_data(dataset_cfg, batch_size):
-    if dataset_cfg.name == "SYNTHETIC_CIFAR100_1M":
+    if dataset_cfg.name in ("SYNTHETIC_CIFAR100_1M", "SYNTHETIC_CIFAR100_1M_LT"):
         trainset, testset = get_dataset(dataset_cfg.name)
         train_loader, _ = get_dataloaders_from_dataset(
             trainset, testset, batch_size=batch_size

@@ -95,6 +95,54 @@ SYNTHETIC_CIFAR100_1M:
     edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/SYNTHETIC_CIFAR100_1M/"
 
 
+SYNTHETIC_CIFAR100_1M_LT:
+  dataset:
+    name: "SYNTHETIC_CIFAR100_1M_LT"
+    num_classes: 100
+    image_size: 32
+  
+  scores:
+    type: "du"
+    original_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/prune/SYNTHETIC_CIFAR100_1M_LT_dynamic_uncertainty_0.json"
+    subset_scores_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/subset/SYNTHETIC_CIFAR100_1M_LT_dynamic_uncertainty_0.json"
+    normalize_scores: false
+
+  models:
+    names: ["resnet50-self-trained"]
+    resnet50:
+      path: "/nfs/homedirs/dhp/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_LT/subset_data/dynamic_uncertainty.pth"
+
+  hyperparams:
+    use_labels: true
+    k_values: [10, 20, 50]
+    distance: "euclidean"
+    lr: 0.001
+    batch_size: 128
+    epochs: 25
+    gnn:
+      type: "gcn"  # Options: "gcn", "gat"
+      hidden_layers: [512, 256, 128]
+
+  wandb:
+    project: "GNN extrapolate TDDS SYNTHETIC"
+
+  output:
+    gnn_dict_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/scores/extrapolation/extrapolated/gnn"
+
+  checkpoints:
+    read_embeddings: false
+    save_embeddings: false
+    embeddings_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/embeddings/SYNTHETIC_CIFAR100_1M_LT/embeddings_dict.pth"
+    read_labels: false
+    save_labels: false
+    labels_file: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/labels/SYNTHETIC_CIFAR100_1M_LT/"
+    read_knn: false
+    save_knn: false
+    knn_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/knn/SYNTHETIC_CIFAR100_1M_LT/"
+    read_edge_attr: false
+    save_edge_attr: false
+    edge_attr_path: "/nfs/homedirs/dhp/unsupervised-data-pruning/savedir/edge_attr/SYNTHETIC_CIFAR100_1M_LT/"
+
 PLACES_365:
   dataset:
     name: "PLACES_365"

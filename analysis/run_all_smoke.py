@@ -18,6 +18,7 @@ MODULES = [
     ("b1_calibrate_scores", "B1      ranking-preserving calibration"),
     ("b3p1_uncertainty_error", "B3.1    uncertainty as error predictor"),
     ("longtail_fidelity", "LongTail score-fidelity (replaces dist-shift)"),
+    ("perturbations", "OOD      ImageNet-C-style on-the-fly test corruptions"),
 ]
 
 

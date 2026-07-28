@@ -276,7 +276,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["CIFAR10", "CIFAR100", "SYNTHETIC_CIFAR100_1M"],
+        choices=["CIFAR10", "CIFAR100", "SYNTHETIC_CIFAR100_1M", "SYNTHETIC_CIFAR100_1M_LT"],
         help="Dataset to use for training"
     )
     

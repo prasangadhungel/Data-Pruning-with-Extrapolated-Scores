@@ -80,6 +80,44 @@ SYNTHETIC_CIFAR100_1M:
     scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
 
 
+SYNTHETIC_CIFAR100_1M_LT:
+  experiment:
+    num_iterations: 1
+
+  dataset:
+    name: "SYNTHETIC_CIFAR100_1M_LT"
+    num_classes: 100
+    image_size: 32
+    for_extrapolation:
+      value: false
+      subset_size: 200000
+
+  model:
+    name: "ResNet50"
+
+  training:
+    batch_size: 256
+    num_epochs: 50
+    lr: 0.001
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
+
+  pruning:
+    prune: true
+    window: 10
+    num_epochs: 50
+    trajectory: 10
+    decay: 0.9
+    percentages: [0.95, 0.90, 0.8, 0.5, 0.2, 0.1]
+
+  logging:
+    log_interval: 15000
+
+  paths:
+    models: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/SYNTHETIC_CIFAR100_1M_LT/full_data"
+    scores: "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/scores/prune"
+
 PLACES_365:
   experiment:
     num_iterations: 1
