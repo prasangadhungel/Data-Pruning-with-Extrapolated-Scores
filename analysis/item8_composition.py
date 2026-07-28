@@ -363,7 +363,7 @@ def main() -> None:
     ap.add_argument("--full_scores", default=FULL_SCORES_PATH)
     ap.add_argument("--extrapolated_scores", default=EXTRAPOLATED_SCORES_PATH)
     ap.add_argument("--labels", help="npy of int labels indexed by sample id")
-    ap.add_argument("--dataset", help="dataset name; if given (and --labels not), "
+    ap.add_argument("--dataset", default="IMAGENET", help="dataset name; if given (and --labels not), "
                     "labels are materialised via utils.dataset.get_dataset")
     ap.add_argument("--labels_cache", help="npy path to cache/reuse dataset labels")
     ap.add_argument("--keep_fracs", type=float, nargs="+",

@@ -25,7 +25,7 @@ import argparse
 from typing import Dict, Optional
 
 import numpy as np
-
+from loguru import logger
 import rebuttal_common as rc
 
 # ---------------------------------------------------------------------------
@@ -51,9 +51,12 @@ import rebuttal_common as rc
 ROOT = "/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning"
 gnn_extra_checkpoint = f"/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/pruned_models/PLACES_365/gnn__TDDS_PLACES_365_resnet50-self-trained_k_10_seed_360692_euclidean_5_31/model_pruned_80.pth"
 knn_extra_checkpoint = f"/ceph/hdd/shared/schmidt_schwinn_data_pruning/unsupervised-data-pruning/models/pruned_models/PLACES_365/knn_TDDS_PLACES_365_weighted_resnet50-self-trained_k_20_seed_360692_euclidean__5_31/model_pruned_80.pth"
-original_score_checkpoint = f"{ROOT}/models/pruned_models/PLACES_365/tdds/model_pruned_80.pth"
+original_score_checkpoint = f"{ROOT}/models/pruned_models/PLACES_365/tdds/PLACES_365_last_tdds_0/model_pruned_80.pth"
 
 #todo change to use models and run predictions from checkpoints instead of npz files, since the checkpoints exist now
+
+logger.remove()
+logger.add(sys.stdout, format="{time:MM-DD HH:mm} - {message}")
 
 def predict_from_checkpoint(checkpoint_path, model, test_loader, device="cuda"):
     """Per-sample test predictions from a loaded model (real-machine path).
@@ -135,14 +138,14 @@ def behavior_preservation(
 
 
 def _print(res: Dict) -> None:
-    print(f"  n_test={res['n_test']} acc_gt={res['overall_acc_gt']:.4f} "
+    logger.info(f"  n_test={res['n_test']} acc_gt={res['overall_acc_gt']:.4f} "
           f"acc_ext={res['overall_acc_ext']:.4f}")
-    print(f"  error-set Jaccard   = {res['error_set_jaccard']:.4f}")
-    print(f"  prediction agreement= {res['prediction_agreement']:.4f}")
-    print(f"  error agreement     = {res['error_agreement']:.4f}")
-    print(f"  worst-group gap     = {res['worst_group_gap']:.4f}")
-    print(f"  mean class gap      = {res['mean_class_gap']:.4f}")
-    print(f"  tail classes {res['tail']['classes']}: "
+    logger.info(f"  error-set Jaccard   = {res['error_set_jaccard']:.4f}")
+    logger.info(f"  prediction agreement= {res['prediction_agreement']:.4f}")
+    logger.info(f"  error agreement     = {res['error_agreement']:.4f}")
+    logger.info(f"  worst-group gap     = {res['worst_group_gap']:.4f}")
+    logger.info(f"  mean class gap      = {res['mean_class_gap']:.4f}")
+    logger.info(f"  tail classes {res['tail']['classes']}: "
           f"acc_gt={res['tail']['acc_gt']:.4f} acc_ext={res['tail']['acc_ext']:.4f} "
           f"gap={res['tail_gap']:.4f}")
 
@@ -154,7 +157,7 @@ def _load_pred_npz(path):
 
 
 def run_smoke() -> Dict:
-    print("[item2] SMOKE: behavior preservation on synthetic predictions")
+    logger.info("[item2] SMOKE: behavior preservation on synthetic predictions")
     rng = np.random.default_rng(6)
     n, k = 2000, 10
     label = rng.integers(0, k, size=n)
@@ -168,7 +171,7 @@ def run_smoke() -> Dict:
     _print(res)
     assert res["error_agreement"] > 0.8, res["error_agreement"]
     assert res["error_set_jaccard"] > 0.5
-    print("[item2] SMOKE PASSED")
+    logger.info("[item2] SMOKE PASSED")
     return res
 
 
@@ -196,7 +199,7 @@ def main() -> None:
     _print(res)
     if args.out:
         rc.save_json(res, args.out)
-        print(f"[item2] wrote {args.out}")
+        logger.info(f"[item2] wrote {args.out}")
 
 
 if __name__ == "__main__":
