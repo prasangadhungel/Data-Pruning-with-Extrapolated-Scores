@@ -156,17 +156,90 @@ def predict_from_checkpoint(checkpoint_path, model, test_loader, device="cuda"):
     return (np.concatenate(idxs), np.concatenate(labs), np.concatenate(preds))
 
 
+def _z_for_alpha(alpha: float) -> float:
+    """Two-sided standard-normal quantile for a ``1 - alpha`` CI (95% -> 1.96)."""
+    try:
+        from scipy.stats import norm
+
+        return float(norm.ppf(1.0 - alpha / 2.0))
+    except ModuleNotFoundError:
+        return 1.959963984540054 if abs(alpha - 0.05) < 1e-9 else 1.959963984540054
+
+
+def wilson_ci(k: int, n: int, z: float) -> list:
+    """Wilson score interval rounded to 4 dp, returned as a JSON-friendly list."""
+    lo, hi = rc.wilson_interval(k, n, z)
+    return [round(lo, 4), round(hi, 4)]
+
+
 def behavior_preservation(
     label: np.ndarray,
     pred_gt: np.ndarray,
     pred_ext: np.ndarray,
     tail_frac: float = 0.2,
     class_freq: Optional[np.ndarray] = None,
+    ci_alpha: float = 0.05,
+    n_boot: int = 2000,
+    boot_seed: int = 0,
 ) -> Dict:
+    """Quantify whether the extrapolation-pruned model BEHAVES like the GT-pruned one.
+
+    All statistics are computed on the SAME test set for both models, so every
+    comparison is *paired*. Uncertainty is reported at the ``1 - ci_alpha`` level
+    (default 95%): binomial rates use a Wilson score interval; paired differences
+    and set-overlap statistics use a percentile bootstrap that resamples the same
+    test indices for both models (``n_boot`` resamples, seeded by ``boot_seed``).
+
+    -----------------------------------------------------------------------------
+    METRIC GLOSSARY (all keys in the returned dict)
+    -----------------------------------------------------------------------------
+    n_test               : number of test samples compared.
+    overall_acc_gt/ext   : top-1 accuracy of the GT-pruned / extrapolation-pruned
+                           model. ``*_ci`` = 95% Wilson interval on that accuracy.
+    accuracy_gap         : overall_acc_ext - overall_acc_gt (signed). ``*_ci`` is a
+                           paired bootstrap interval; if it straddles 0 the two
+                           models are statistically indistinguishable in accuracy.
+    error_set_jaccard    : |errors_gt ∩ errors_ext| / |errors_gt ∪ errors_ext| --
+                           do the models fail on the SAME samples? 1 = identical
+                           error sets, 0 = disjoint. ``*_ci`` = bootstrap interval.
+    correctness_breakdown: the paired 2x2 correctness contingency over the test set
+                           (fractions sum to 1), each with count ``n_*`` and a Wilson
+                           ``*_ci``:
+                             both_correct   -- BOTH models predict the true label
+                                               (the samples both get right);
+                             both_wrong     -- both models are wrong;
+                             only_gt_correct-- GT-pruned right, extrapolation wrong;
+                             only_ext_correct- extrapolation right, GT-pruned wrong.
+                           ``both_correct`` + ``both_wrong`` == ``error_agreement``;
+                           ``only_gt_correct``/``only_ext_correct`` are McNemar b/c.
+    prediction_agreement : fraction of samples where the two models emit the SAME
+                           predicted label (right or wrong). ``*_ci`` = Wilson.
+    error_agreement      : fraction of samples where the two models are BOTH right
+                           or BOTH wrong (agreement on correctness). ``*_ci`` = Wilson.
+    mcnemar              : paired McNemar test on per-sample correctness -- ``b``/``c``
+                           discordant counts, ``statistic`` (chi-square, 1 dof, with
+                           continuity correction) and ``p_value``. Small p => the two
+                           models fail on *different* examples (behaviour not preserved).
+    worst_group_gap      : max over classes of |acc_gt - acc_ext| (the single class
+                           whose accuracy shifts most between the two models).
+    worst_group_class    : the class id attaining ``worst_group_gap``.
+    mean_class_gap       : mean over classes of |acc_gt - acc_ext|. ``*_ci`` = bootstrap
+                           over classes (accounts for how many classes there are).
+    tail                 : rarest ``tail_frac`` of classes (by ``class_freq`` if given,
+                           else by test-set frequency). ``acc_gt``/``acc_ext`` with
+                           Wilson ``*_ci`` on the pooled tail accuracy.
+    tail_gap             : |tail.acc_gt - tail.acc_ext|; ``tail_gap_ci`` = paired
+                           bootstrap over tail samples.
+    per_class            : per-class ``acc_gt``, ``acc_ext``, ``n`` (support).
+    ci_level             : the confidence level used for every ``*_ci`` above.
+    -----------------------------------------------------------------------------
+    """
     correct_gt = pred_gt == label
     correct_ext = pred_ext == label
     err_gt = set(np.nonzero(~correct_gt)[0].tolist())
     err_ext = set(np.nonzero(~correct_ext)[0].tolist())
+    n = len(label)
+    z = _z_for_alpha(ci_alpha)
 
     classes = sorted(set(label.tolist()))
     per_class = {}
@@ -177,9 +250,20 @@ def behavior_preservation(
             "acc_ext": float(correct_ext[m].mean()),
             "n": int(m.sum()),
         }
-    worst_gap = max(abs(v["acc_gt"] - v["acc_ext"]) for v in per_class.values())
-    mean_gap = float(np.mean([abs(v["acc_gt"] - v["acc_ext"])
-                              for v in per_class.values()]))
+    class_gaps = np.array(
+        [abs(v["acc_gt"] - v["acc_ext"]) for v in per_class.values()]
+    )
+    worst_class = max(per_class, key=lambda c: abs(
+        per_class[c]["acc_gt"] - per_class[c]["acc_ext"]))
+    worst_gap = float(abs(per_class[worst_class]["acc_gt"]
+                          - per_class[worst_class]["acc_ext"]))
+    mean_gap = float(class_gaps.mean())
+    # bootstrap the mean class gap OVER CLASSES (reflects how many classes exist)
+    n_classes = len(class_gaps)
+    mean_gap_ci = rc.bootstrap_ci(
+        lambda idx: float(class_gaps[idx].mean()),
+        n_classes, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed,
+    )
 
     # tail = rarest classes (by class_freq if given, else fewest test samples)
     if class_freq is not None:
@@ -189,40 +273,127 @@ def behavior_preservation(
     n_tail = max(1, int(tail_frac * len(classes)))
     tail_classes = [classes[i] for i in order[:n_tail]]
     tail_mask = np.isin(label, tail_classes)
+    tail_idx = np.nonzero(tail_mask)[0]
+    tail_correct_gt = correct_gt[tail_mask]
+    tail_correct_ext = correct_ext[tail_mask]
+    n_tail_samples = int(tail_mask.sum())
     tail = {
         "classes": [int(c) for c in tail_classes],
-        "acc_gt": float(correct_gt[tail_mask].mean()),
-        "acc_ext": float(correct_ext[tail_mask].mean()),
+        "n": n_tail_samples,
+        "acc_gt": float(tail_correct_gt.mean()) if n_tail_samples else float("nan"),
+        "acc_ext": float(tail_correct_ext.mean()) if n_tail_samples else float("nan"),
+        "acc_gt_ci": wilson_ci(int(tail_correct_gt.sum()), n_tail_samples, z),
+        "acc_ext_ci": wilson_ci(int(tail_correct_ext.sum()), n_tail_samples, z),
+    }
+    tail_gap = abs(tail["acc_gt"] - tail["acc_ext"])
+    tail_gap_ci = rc.bootstrap_ci(
+        lambda idx: float(abs(tail_correct_ext[idx].mean()
+                              - tail_correct_gt[idx].mean())),
+        n_tail_samples, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed,
+    ) if n_tail_samples else (float("nan"), float("nan"))
+
+    # paired bootstrap helpers over the full test set (same idx for both models)
+    def _acc_gap(idx):
+        return float(correct_ext[idx].mean() - correct_gt[idx].mean())
+
+    def _jaccard_boot(idx):
+        eg = ~correct_gt[idx]
+        ee = ~correct_ext[idx]
+        both = int(np.sum(eg & ee))
+        either = int(np.sum(eg | ee))
+        return both / either if either else 1.0
+
+    acc_gap = float(correct_ext.mean() - correct_gt.mean())
+
+    # paired 2x2 correctness contingency (fractions sum to 1)
+    both_correct = correct_gt & correct_ext
+    both_wrong = (~correct_gt) & (~correct_ext)
+    only_gt = correct_gt & (~correct_ext)
+    only_ext = (~correct_gt) & correct_ext
+
+    def _cell(mask):
+        k = int(mask.sum())
+        return {"frac": float(k / n) if n else float("nan"),
+                "n": k, "frac_ci": wilson_ci(k, n, z)}
+
+    correctness_breakdown = {
+        "both_correct": _cell(both_correct),
+        "both_wrong": _cell(both_wrong),
+        "only_gt_correct": _cell(only_gt),
+        "only_ext_correct": _cell(only_ext),
     }
 
     return {
-        "n_test": int(len(label)),
+        "n_test": int(n),
+        "ci_level": round(1.0 - ci_alpha, 4),
         "overall_acc_gt": float(correct_gt.mean()),
+        "overall_acc_gt_ci": wilson_ci(int(correct_gt.sum()), n, z),
         "overall_acc_ext": float(correct_ext.mean()),
+        "overall_acc_ext_ci": wilson_ci(int(correct_ext.sum()), n, z),
+        "accuracy_gap": acc_gap,
+        "accuracy_gap_ci": rc.bootstrap_ci(
+            _acc_gap, n, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed),
         "error_set_jaccard": rc.jaccard(err_gt, err_ext),
+        "error_set_jaccard_ci": rc.bootstrap_ci(
+            _jaccard_boot, n, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed),
+        "correctness_breakdown": correctness_breakdown,
         "prediction_agreement": float(np.mean(pred_gt == pred_ext)),
-        "error_agreement": float(
-            np.mean((~correct_gt) == (~correct_ext))
-        ),
+        "prediction_agreement_ci": wilson_ci(
+            int(np.sum(pred_gt == pred_ext)), n, z),
+        "error_agreement": float(np.mean((~correct_gt) == (~correct_ext))),
+        "error_agreement_ci": wilson_ci(
+            int(np.sum((~correct_gt) == (~correct_ext))), n, z),
+        "mcnemar": rc.mcnemar_test(correct_gt, correct_ext),
         "worst_group_gap": worst_gap,
+        "worst_group_class": int(worst_class),
         "mean_class_gap": mean_gap,
+        "mean_class_gap_ci": mean_gap_ci,
         "tail": tail,
-        "tail_gap": abs(tail["acc_gt"] - tail["acc_ext"]),
+        "tail_gap": tail_gap,
+        "tail_gap_ci": tail_gap_ci,
         "per_class": per_class,
     }
 
 
+def _ci(v) -> str:
+    return f"[{v[0]:.4f}, {v[1]:.4f}]"
+
+
 def _print(res: Dict) -> None:
-    logger.info(f"  n_test={res['n_test']} acc_gt={res['overall_acc_gt']:.4f} "
-          f"acc_ext={res['overall_acc_ext']:.4f}")
-    logger.info(f"  error-set Jaccard   = {res['error_set_jaccard']:.4f}")
-    logger.info(f"  prediction agreement= {res['prediction_agreement']:.4f}")
-    logger.info(f"  error agreement     = {res['error_agreement']:.4f}")
-    logger.info(f"  worst-group gap     = {res['worst_group_gap']:.4f}")
-    logger.info(f"  mean class gap      = {res['mean_class_gap']:.4f}")
-    logger.info(f"  tail classes {res['tail']['classes']}: "
-          f"acc_gt={res['tail']['acc_gt']:.4f} acc_ext={res['tail']['acc_ext']:.4f} "
-          f"gap={res['tail_gap']:.4f}")
+    lvl = int(round(res.get("ci_level", 0.95) * 100))
+    logger.info(f"  n_test={res['n_test']}  ({lvl}% CIs shown in brackets)")
+    logger.info(f"  acc_gt  = {res['overall_acc_gt']:.4f} {_ci(res['overall_acc_gt_ci'])}")
+    logger.info(f"  acc_ext = {res['overall_acc_ext']:.4f} {_ci(res['overall_acc_ext_ci'])}")
+    logger.info(f"  accuracy gap (ext-gt) = {res['accuracy_gap']:+.4f} "
+                f"{_ci(res['accuracy_gap_ci'])}")
+    logger.info(f"  error-set Jaccard   = {res['error_set_jaccard']:.4f} "
+                f"{_ci(res['error_set_jaccard_ci'])}")
+    cb = res["correctness_breakdown"]
+    logger.info("  correctness breakdown (frac [CI], n):")
+    for key, lbl in (("both_correct", "both correct   "),
+                     ("both_wrong", "both wrong     "),
+                     ("only_gt_correct", "only GT correct "),
+                     ("only_ext_correct", "only ext correct")):
+        cell = cb[key]
+        logger.info(f"    {lbl} = {cell['frac']:.4f} {_ci(cell['frac_ci'])} "
+                    f"(n={cell['n']})")
+    logger.info(f"  prediction agreement= {res['prediction_agreement']:.4f} "
+                f"{_ci(res['prediction_agreement_ci'])}")
+    logger.info(f"  error agreement     = {res['error_agreement']:.4f} "
+                f"{_ci(res['error_agreement_ci'])}")
+    mc = res["mcnemar"]
+    logger.info(f"  McNemar b={mc['b']} c={mc['c']} chi2={mc['statistic']:.3f} "
+                f"p={mc['p_value']:.4g}")
+    logger.info(f"  worst-group gap     = {res['worst_group_gap']:.4f} "
+                f"(class {res['worst_group_class']})")
+    logger.info(f"  mean class gap      = {res['mean_class_gap']:.4f} "
+                f"{_ci(res['mean_class_gap_ci'])}")
+    t = res["tail"]
+    logger.info(f"  tail classes {t['classes']} (n={t['n']}): "
+                f"acc_gt={t['acc_gt']:.4f} {_ci(t['acc_gt_ci'])} "
+                f"acc_ext={t['acc_ext']:.4f} {_ci(t['acc_ext_ci'])}")
+    logger.info(f"  tail gap            = {res['tail_gap']:.4f} "
+                f"{_ci(res['tail_gap_ci'])}")
 
 
 def _load_pred_npz(path):
@@ -303,7 +474,9 @@ def run_from_checkpoints(args) -> Dict:
 
     label, pred_gt, pred_ext = _align_preds(gt_triple, ext_triple)
     cf = np.load(args.class_freq) if args.class_freq else None
-    res = behavior_preservation(label, pred_gt, pred_ext, args.tail_frac, cf)
+    res = behavior_preservation(label, pred_gt, pred_ext, args.tail_frac, cf,
+                                ci_alpha=args.ci_alpha, n_boot=args.n_boot,
+                                boot_seed=args.boot_seed)
     res["ckpt_gt"] = args.ckpt_gt
     res["ckpt_ext"] = args.ckpt_ext
     res["corruption"] = args.corruption
@@ -345,6 +518,13 @@ def main() -> None:
     ap.add_argument("--pred_ext", help="npz sample_idx,label,pred (skips checkpoint mode)")
     ap.add_argument("--tail_frac", type=float, default=0.2)
     ap.add_argument("--class_freq", help="optional npy of per-class train frequency")
+    # --- uncertainty quantification ---------------------------------------------
+    ap.add_argument("--ci-alpha", type=float, default=0.05,
+                    help="significance level for confidence intervals (0.05 -> 95%% CI)")
+    ap.add_argument("--n-boot", type=int, default=2000,
+                    help="bootstrap resamples for paired-difference / Jaccard CIs")
+    ap.add_argument("--boot-seed", type=int, default=0,
+                    help="seed for the bootstrap resampling (reproducible CIs)")
     ap.add_argument("--out")
     args = ap.parse_args()
 
@@ -357,7 +537,9 @@ def main() -> None:
         label_ext, pred_ext = _load_pred_npz(args.pred_ext)
         assert np.array_equal(label_gt, label_ext), "test label order mismatch"
         cf = np.load(args.class_freq) if args.class_freq else None
-        res = behavior_preservation(label_gt, pred_gt, pred_ext, args.tail_frac, cf)
+        res = behavior_preservation(label_gt, pred_gt, pred_ext, args.tail_frac, cf,
+                                    ci_alpha=args.ci_alpha, n_boot=args.n_boot,
+                                    boot_seed=args.boot_seed)
         _print(res)
         if args.out:
             rc.save_json(res, args.out)

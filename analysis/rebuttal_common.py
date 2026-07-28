@@ -168,6 +168,81 @@ def jaccard(a: Sequence[int], b: Sequence[int]) -> float:
     return len(sa & sb) / len(sa | sb)
 
 
+# --------------------------------------------------------------------------- #
+# Uncertainty quantification (confidence intervals + paired significance)
+# --------------------------------------------------------------------------- #
+def wilson_interval(k: int, n: int, z: float = 1.959963984540054) -> Tuple[float, float]:
+    """Wilson score confidence interval for a binomial proportion ``k / n``.
+
+    Preferred over the normal (Wald) interval for accuracies / agreement rates:
+    it stays inside ``[0, 1]`` and is well-behaved for small ``n`` or proportions
+    near 0/1. ``z`` is the standard-normal quantile (default 1.96 -> 95% CI).
+    Returns ``(lo, hi)``; ``(nan, nan)`` when ``n == 0``.
+    """
+    if n <= 0:
+        return (float("nan"), float("nan"))
+    phat = k / n
+    denom = 1.0 + z * z / n
+    center = (phat + z * z / (2 * n)) / denom
+    half = (z * np.sqrt(phat * (1 - phat) / n + z * z / (4 * n * n))) / denom
+    return (max(0.0, center - half), min(1.0, center + half))
+
+
+def bootstrap_ci(
+    stat_fn,
+    n: int,
+    n_boot: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> Tuple[float, float]:
+    """Percentile bootstrap CI for a statistic computed over ``n`` paired items.
+
+    ``stat_fn(idx)`` receives a resampled index array (length ``n``, drawn with
+    replacement from ``range(n)``) and returns a scalar. Resampling the SAME
+    indices for every quantity keeps paired comparisons (e.g. an accuracy gap or
+    an error-set Jaccard between two models on one test set) correctly coupled.
+    Returns the ``(alpha/2, 1-alpha/2)`` percentile interval.
+    """
+    if n <= 0:
+        return (float("nan"), float("nan"))
+    rng = np.random.default_rng(seed)
+    stats = np.empty(n_boot, dtype=np.float64)
+    for b in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        stats[b] = stat_fn(idx)
+    lo, hi = np.percentile(stats, [100 * alpha / 2.0, 100 * (1 - alpha / 2.0)])
+    return (float(lo), float(hi))
+
+
+def mcnemar_test(correct_a: np.ndarray, correct_b: np.ndarray) -> Dict[str, float]:
+    """Paired McNemar test on two models' per-sample correctness (same test set).
+
+    Tests whether the two models' error patterns differ *systematically*. Uses the
+    discordant pairs ``b`` (A right / B wrong) and ``c`` (A wrong / B right):
+    with continuity correction ``chi2 = (|b - c| - 1)^2 / (b + c)`` (~ chi-square,
+    1 dof). A small ``p_value`` means the two models fail on different examples
+    (behaviour NOT preserved); a large ``p_value`` is consistent with equivalent
+    behaviour. Returns ``b``, ``c``, ``statistic`` and ``p_value``.
+    """
+    a = np.asarray(correct_a).astype(bool)
+    b_arr = np.asarray(correct_b).astype(bool)
+    b = int(np.sum(a & ~b_arr))
+    c = int(np.sum(~a & b_arr))
+    nd = b + c
+    if nd == 0:
+        return {"b": b, "c": c, "statistic": 0.0, "p_value": 1.0}
+    stat = (abs(b - c) - 1.0) ** 2 / nd if nd > 0 else 0.0
+    try:
+        from scipy.stats import chi2
+
+        p = float(chi2.sf(stat, df=1))
+    except ModuleNotFoundError:  # normal-approx fallback without scipy
+        z = np.sqrt(max(stat, 0.0))
+        p = float(2.0 * 0.5 * np.exp(-0.717 * z - 0.416 * z * z))  # rough bound
+        p = min(1.0, max(0.0, p))
+    return {"b": b, "c": c, "statistic": float(stat), "p_value": p}
+
+
 def topk_retained(scores: Dict[int, float], keep_frac: float) -> List[int]:
     """Indices retained when keeping the top ``keep_frac`` by score (repo rule)."""
     ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
