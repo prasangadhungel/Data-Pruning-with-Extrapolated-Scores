@@ -47,24 +47,62 @@ def load_embeddings(path: str, dtype=np.float64) -> np.ndarray:
     matrices (e.g. ImageNet-scale) to halve the memory footprint.
     """
     ext = os.path.splitext(path)[1].lower()
-    if ext in (".pth", ".pt"):
-        import torch  # local import on purpose
 
-        obj = torch.load(path, map_location="cpu")
-        if isinstance(obj, dict):
-            # dict{idx -> vector}: order by index
-            idxs = sorted(int(k) for k in obj.keys())
-            arr = np.stack([np.asarray(obj[k]).reshape(-1) for k in idxs])
-        else:
-            arr = obj.detach().cpu().numpy()
-        return np.asarray(arr, dtype=dtype)
-    if ext == ".npy":
+    if ext in (".npy",):
         return np.asarray(np.load(path), dtype=dtype)
     if ext == ".npz":
         z = np.load(path)
         key = "embeddings" if "embeddings" in z else list(z.keys())[0]
         return np.asarray(z[key], dtype=dtype)
-    raise ValueError(f"Unsupported embeddings extension: {ext}")
+
+    # Everything else (.pth/.pt, .pth.tar, .bin, or no extension) is treated as a
+    # torch payload. torch is imported lazily so numpy-only smoke runs never need it.
+    if ext not in (".pth", ".pt"):
+        import warnings
+
+        warnings.warn(
+            f"embeddings extension {ext!r} not recognised; attempting torch.load "
+            f"({path}).",
+            stacklevel=2,
+        )
+    return _torch_embeddings_to_array(path, dtype)
+
+
+def _torch_embeddings_to_array(path: str, dtype=np.float64) -> np.ndarray:
+    """Load a torch embeddings file into an ``[N, d]`` ndarray.
+
+    Accepts three payload shapes:
+      * a Tensor / ndarray of shape ``[N, d]``;
+      * a ``dict{int_idx -> vector}`` (ordered by index);
+      * a ``dict`` wrapping the matrix under an ``embeddings``/``features``/``emb`` key.
+    """
+    import torch  # local import on purpose
+
+    obj = torch.load(path, map_location="cpu")
+
+    if isinstance(obj, dict):
+        # (a) explicit container key
+        for key in ("embeddings", "features", "emb"):
+            if key in obj:
+                val = obj[key]
+                arr = val.detach().cpu().numpy() if hasattr(val, "detach") \
+                    else np.asarray(val)
+                return np.asarray(arr, dtype=dtype)
+        # (b) dict{idx -> vector}: order by integer index
+        try:
+            idxs = sorted(int(k) for k in obj.keys())
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"Unrecognised torch embeddings dict in {path!r}: keys are not "
+                f"integer sample ids and no 'embeddings'/'features' key is present "
+                f"(got keys like {list(obj.keys())[:3]}). If this is a model "
+                f"state_dict, pass the extracted embeddings instead."
+            ) from exc
+        arr = np.stack([np.asarray(obj[k]).reshape(-1) for k in idxs])
+        return np.asarray(arr, dtype=dtype)
+
+    arr = obj.detach().cpu().numpy() if hasattr(obj, "detach") else np.asarray(obj)
+    return np.asarray(arr, dtype=dtype)
 
 
 def scores_to_array(scores: Dict[int, float], n: int, default: float = np.nan) -> np.ndarray:
@@ -237,6 +275,62 @@ def cohen_kappa(a: np.ndarray, b: np.ndarray) -> float:
     if pe >= 1.0:
         return 1.0 if po >= 1.0 else float("nan")
     return float((po - pe) / (1.0 - pe))
+
+
+def kl_divergence(p: np.ndarray, q: np.ndarray, eps: float = 1e-12) -> float:
+    """KL(p || q) between two non-negative vectors, each normalised to sum 1.
+
+    Both inputs are treated as (unnormalised) distributions over the SAME aligned
+    support (e.g. per-class accuracy of two models, class ``c`` in the same slot).
+    Returns ``sum_i p_i * log(p_i / q_i)`` in nats: 0 iff the normalised
+    distributions are identical, larger when ``p`` puts mass where ``q`` does not.
+    Asymmetric by design; use ``js_divergence`` for a symmetric alternative.
+    """
+    p = np.asarray(p, dtype=np.float64)
+    q = np.asarray(q, dtype=np.float64)
+    if p.size == 0 or q.size != p.size:
+        return float("nan")
+    p = p / (p.sum() + eps)
+    q = q / (q.sum() + eps)
+    mask = p > 0
+    return float(np.sum(p[mask] * np.log((p[mask] + eps) / (q[mask] + eps))))
+
+
+def js_divergence(p: np.ndarray, q: np.ndarray, eps: float = 1e-12) -> float:
+    """Jensen-Shannon divergence (symmetric, bounded) between two distributions."""
+    p = np.asarray(p, dtype=np.float64)
+    q = np.asarray(q, dtype=np.float64)
+    if p.size == 0 or q.size != p.size:
+        return float("nan")
+    p = p / (p.sum() + eps)
+    q = q / (q.sum() + eps)
+    m = 0.5 * (p + q)
+    return float(0.5 * kl_divergence(p, m, eps) + 0.5 * kl_divergence(q, m, eps))
+
+
+def wasserstein1(a: np.ndarray, b: np.ndarray) -> float:
+    """1-D Wasserstein-1 (earth-mover's) distance between two value samples.
+
+    Treats ``a`` and ``b`` as equally-weighted empirical distributions of scalar
+    values (e.g. the per-class accuracies of two models) and returns the minimal
+    average "mass x distance" to morph one into the other. Unlike a mean absolute
+    gap it is order-agnostic: it compares the SHAPE/SPREAD of the two accuracy
+    distributions, not class-by-class differences. Numpy-only (matches
+    ``scipy.stats.wasserstein_distance``); fast path for equal-length inputs.
+    """
+    a = np.sort(np.asarray(a, dtype=np.float64))
+    b = np.sort(np.asarray(b, dtype=np.float64))
+    if a.size == 0 or b.size == 0:
+        return float("nan")
+    if a.size == b.size:
+        return float(np.mean(np.abs(a - b)))
+    # general case: integrate |CDF_a - CDF_b| over the merged support
+    allv = np.concatenate([a, b])
+    allv.sort()
+    deltas = np.diff(allv)
+    cdf_a = np.searchsorted(a, allv[:-1], side="right") / a.size
+    cdf_b = np.searchsorted(b, allv[:-1], side="right") / b.size
+    return float(np.sum(np.abs(cdf_a - cdf_b) * deltas))
 
 
 def mcnemar_test(correct_a: np.ndarray, correct_b: np.ndarray) -> Dict[str, float]:

@@ -238,6 +238,17 @@ def behavior_preservation(
     worst_group_class    : the class id attaining ``worst_group_gap``.
     mean_class_gap       : mean over classes of |acc_gt - acc_ext|. ``*_ci`` = bootstrap
                            over classes (accounts for how many classes there are).
+    class_acc_wasserstein: Wasserstein-1 (earth-mover's) distance between the two
+                           models' per-class ACCURACY distributions -- order-agnostic,
+                           captures whether the overall spread/shape of per-class
+                           accuracy shifts (same units as accuracy). ``*_ci`` = bootstrap.
+    class_acc_kl_gt_ext  : KL(gt || ext) in nats between the per-class accuracy vectors
+                           normalised to distributions over classes (aligned by class):
+                           large when the extrapolation-pruned model concentrates/loses
+                           accuracy on different classes than the GT-pruned one. ``*_ci``
+                           = bootstrap.
+    class_acc_js         : Jensen-Shannon divergence (symmetric, bounded) counterpart
+                           of ``class_acc_kl_gt_ext``.
     tail                 : rarest ``tail_frac`` of classes (by ``class_freq`` if given,
                            else by test-set frequency). ``acc_gt``/``acc_ext`` with
                            Wilson ``*_ci`` on the pooled tail accuracy.
@@ -277,6 +288,22 @@ def behavior_preservation(
         lambda idx: float(class_gaps[idx].mean()),
         n_classes, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed,
     )
+
+    # distribution-level alternatives to the mean absolute class gap: compare the
+    # two models' per-class accuracy vectors as distributions (aligned by class).
+    acc_gt_vec = np.array([per_class[c]["acc_gt"] for c in classes])
+    acc_ext_vec = np.array([per_class[c]["acc_ext"] for c in classes])
+    class_acc_wasserstein = rc.wasserstein1(acc_gt_vec, acc_ext_vec)
+    class_acc_wasserstein_ci = rc.bootstrap_ci(
+        lambda idx: rc.wasserstein1(acc_gt_vec[idx], acc_ext_vec[idx]),
+        n_classes, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed,
+    )
+    class_acc_kl = rc.kl_divergence(acc_gt_vec, acc_ext_vec)
+    class_acc_kl_ci = rc.bootstrap_ci(
+        lambda idx: rc.kl_divergence(acc_gt_vec[idx], acc_ext_vec[idx]),
+        n_classes, n_boot=n_boot, alpha=ci_alpha, seed=boot_seed,
+    )
+    class_acc_js = rc.js_divergence(acc_gt_vec, acc_ext_vec)
 
     # tail = rarest classes (by class_freq if given, else fewest test samples)
     if class_freq is not None:
@@ -363,6 +390,11 @@ def behavior_preservation(
         "worst_group_class": int(worst_class),
         "mean_class_gap": mean_gap,
         "mean_class_gap_ci": mean_gap_ci,
+        "class_acc_wasserstein": class_acc_wasserstein,
+        "class_acc_wasserstein_ci": class_acc_wasserstein_ci,
+        "class_acc_kl_gt_ext": class_acc_kl,
+        "class_acc_kl_gt_ext_ci": class_acc_kl_ci,
+        "class_acc_js": class_acc_js,
         "tail": tail,
         "tail_gap": tail_gap,
         "tail_gap_ci": tail_gap_ci,
@@ -406,6 +438,10 @@ def _print(res: Dict) -> None:
                 f"(class {res['worst_group_class']})")
     logger.info(f"  mean class gap      = {res['mean_class_gap']:.4f} "
                 f"{_ci(res['mean_class_gap_ci'])}")
+    logger.info(f"  class-acc Wasserstein= {res['class_acc_wasserstein']:.4f} "
+                f"{_ci(res['class_acc_wasserstein_ci'])}")
+    logger.info(f"  class-acc KL(gt||ext)= {res['class_acc_kl_gt_ext']:.4f} "
+                f"{_ci(res['class_acc_kl_gt_ext_ci'])}  (JS={res['class_acc_js']:.4f})")
     t = res["tail"]
     logger.info(f"  tail classes {t['classes']} (n={t['n']}): "
                 f"acc_gt={t['acc_gt']:.4f} {_ci(t['acc_gt_ci'])} "
